@@ -1,0 +1,17 @@
+{
+  "name": "ai-design-critic-agent",
+  "version": "1.0.0",
+  "description": "AI agent that critiques design images on layout, color, typography, brand guideline compliance, and visual hierarchy, producing a scored Markdown report.",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node --env-file=.env src/server.js",
+    "dev": "node --watch --env-file=.env src/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

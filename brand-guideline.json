@@ -1,0 +1,98 @@
+{
+  "brandName": "Zalopay",
+  "colors": {
+    "primary": {
+      "hex": "#0033C9",
+      "usagePercent": 45
+    },
+    "secondary": {
+      "hex": "#00CF6A",
+      "usagePercent": 45
+    },
+    "accent": {
+      "usagePercent": 10,
+      "allowedColors": [
+        "#FF8A00",
+        "#6F0CDF",
+        "#A1FF00",
+        "#FFD729",
+        "#00B4FF"
+      ]
+    }
+  },
+  "typography": {
+    "headingFont": "Aeonik Pro",
+    "bodyFont": "Aeonik Pro",
+    "style": "Clean, geometric, modern sans-serif"
+  },
+  "designPrinciples": [
+    "High contrast",
+    "Clear visual hierarchy",
+    "Bold typography",
+    "Strong CTA visibility",
+    "Modern technology aesthetic"
+  ],
+  "brandRules": {
+    "colorBalance": {
+      "primary": 45,
+      "secondary": 45,
+      "accent": 10
+    },
+    "allowAccentMixing": true,
+    "minimumContrast": "AA",
+    "avoid": [
+      "Muted colors",
+      "Vintage style",
+      "Decorative fonts",
+      "Low contrast layouts"
+    ]
+  },
+  "tone": [
+    "Modern",
+    "Energetic",
+    "Friendly",
+    "Bold",
+    "Innovative"
+  ],
+  "logo": {
+    "primaryLogo": "assets/logo-primary.png",
+    "alternateLogos": [
+      "assets/logo-white.png",
+      "assets/logo-black.png"
+    ],
+    "referenceImages": [
+      "assets/logo-primary.png",
+      "assets/logo-secondary.png"
+    ],
+    "rules": {
+      "mustAppear": true,
+      "allowRecoloring": false,
+      "allowDistortion": false,
+      "preferredPositions": [
+        "top-left",
+        "top-right"
+      ]
+    }
+  },
+  "scoring": {
+    "logoCompliance": 10
+  },
+  "trademark": {
+    "required": true,
+    "description": "Large decorative Z shape. Often appears as a semi-transparent background watermark behind content.",
+    "variants": [
+      "assets/trademark-z-01.png",
+      "assets/trademark-z-02.png",
+      "assets/trademark-z-03.png"
+    ],
+    "allowedColors": [
+      "#0033C9",
+      "#00CF6A",
+      "#FF8A00",
+      "#6F0CDF",
+      "#A1FF00",
+      "#FFD729",
+      "#00B4FF"
+    ]
+  }
+}

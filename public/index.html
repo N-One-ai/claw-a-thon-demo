@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Design Critic</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<style>
+  :root {
+    --primary: #0033C9;
+    --secondary: #00CF6A;
+    --bg: #f5f6fa;
+    --card-bg: #ffffff;
+    --border: #e0e3eb;
+    --text: #1a1d29;
+    --muted: #6b7280;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  header {
+    background: linear-gradient(135deg, var(--primary), #1747d6 65%, #00CF6A 160%);
+    color: #fff;
+    padding: 40px 0;
+  }
+  .hero-content,
+  .dashboard-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+  header h1 {
+    font-size: 30px;
+    margin: 0 0 8px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  header .subtitle {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.88);
+    max-width: 640px;
+  }
+  .page {
+    padding-top: 28px;
+    padding-bottom: 56px;
+  }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  @media (max-width: 900px) {
+    .summary-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 480px) {
+    .summary-grid { grid-template-columns: 1fr; }
+  }
+  .stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
+  }
+  .stat-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 10px;
+  }
+  .stat-icon {
+    width: 20px;
+    height: 20px;
+    stroke-width: 2;
+    color: #0033C9;
+    flex-shrink: 0;
+  }
+  .stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+  .stat-value.score-value {
+    color: #00CF6A;
+  }
+  .score-progress {
+    margin-top: 12px;
+    height: 6px;
+    border-radius: 999px;
+    background: #eef2f7;
+    overflow: hidden;
+  }
+  .score-progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: #00CF6A;
+    width: 0%;
+    transition: width 0.4s ease;
+  }
+  .time-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .time-date {
+    margin-top: 4px;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--muted);
+  }
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .status-badge-icon {
+    width: 14px;
+    height: 14px;
+    stroke-width: 2;
+  }
+  .status-idle { background: #f1f3f9; color: var(--muted); }
+  .status-loading { background: #eef2ff; color: var(--primary); }
+  .status-done { background: #e6fbf0; color: #00CF6A; }
+  .status-error { background: #fef2f2; color: #b91c1c; }
+  .container {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 900px) {
+    .container { grid-template-columns: 1fr; }
+  }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
+  }
+  .card h2 {
+    font-size: 15px;
+    margin: 0 0 12px;
+    color: var(--primary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .radar-card { display: flex; flex-direction: column; }
+  .radar-chart-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 460px;
+    margin: 0 auto;
+    aspect-ratio: 1 / 1;
+    display: none;
+  }
+  .radar-card.has-data .radar-chart-wrap { display: block; }
+  .radar-card.has-data #radarPlaceholder { display: none; }
+  @media (max-width: 480px) {
+    .radar-chart-wrap { max-width: 100%; }
+  }
+  .brand-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+  .brand-row img {
+    max-width: 160px;
+    max-height: 60px;
+    object-fit: contain;
+    background: #fafafa;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+  }
+  .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+  .swatch {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .swatch-color {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  dl { margin: 0; font-size: 13px; color: var(--muted); }
+  dl div { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed var(--border); }
+  dl div:last-child { border-bottom: none; }
+  dl dt { font-weight: 500; color: var(--text); }
+
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 28px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--muted);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .dropzone.dragover {
+    border-color: var(--primary);
+    background: #eef2ff;
+  }
+  .dropzone input { display: none; }
+  .preview {
+    margin-top: 14px;
+    text-align: center;
+  }
+  .preview-wrap {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+  }
+  .preview-wrap img {
+    display: block;
+    max-width: 100%;
+    max-height: 260px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .annotation-marker {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+  }
+  .annotation-marker .dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2), 0 1px 3px rgba(0, 0, 0, 0.25);
+  }
+  .annotation-marker.severity-critical .dot { background: #ef4444; }
+  .annotation-marker.severity-warning .dot { background: #f5b900; }
+  .annotation-marker.severity-ok .dot { background: #00CF6A; }
+  .annotation-tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1d29;
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 6px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.15s;
+    z-index: 20;
+  }
+  .annotation-marker:hover .annotation-tooltip {
+    opacity: 1;
+    visibility: visible;
+  }
+  label.field-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    margin: 14px 0 6px;
+  }
+  input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  button.analyze-btn {
+    margin-top: 16px;
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button.analyze-btn:hover { background: #002aa3; }
+  button.analyze-btn:disabled {
+    background: #b9c2e0;
+    cursor: not-allowed;
+  }
+  .report-card {
+    min-height: 200px;
+  }
+  .report-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .report-card-header h2 {
+    margin: 0;
+  }
+  .export-menu {
+    position: relative;
+  }
+  .export-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border: 1px solid var(--primary);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--primary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .export-btn:hover:not(:disabled) {
+    background: var(--primary);
+    color: #fff;
+  }
+  .export-btn:disabled {
+    border-color: var(--border);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+  .export-btn .stat-icon {
+    width: 16px;
+    height: 16px;
+    color: currentColor;
+  }
+  .export-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 200px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(16, 24, 40, 0.12);
+    padding: 6px;
+    z-index: 30;
+    display: none;
+  }
+  .export-dropdown.open {
+    display: block;
+  }
+  .export-dropdown button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 10px;
+    border: none;
+    background: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .export-dropdown button:hover {
+    background: #eef2ff;
+    color: var(--primary);
+  }
+  .export-dropdown .stat-icon {
+    width: 16px;
+    height: 16px;
+    color: #00CF6A;
+  }
+  .export-dropdown button:hover .stat-icon {
+    color: var(--primary);
+  }
+  .placeholder {
+    color: var(--muted);
+    font-size: 14px;
+    text-align: center;
+    padding: 60px 20px;
+  }
+  .spinner {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border: 2px solid #d6daf0;
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-box {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 14px;
+  }
+  .overall-score {
+    display: inline-block;
+    background: var(--secondary);
+    color: #003d1f;
+    font-weight: 700;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+  .markdown-body h1 { font-size: 22px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .markdown-body h2 { font-size: 17px; margin-top: 24px; color: var(--primary); }
+  .markdown-body h3 { font-size: 15px; }
+  .markdown-body .section-title {
+    font-size: 17px;
+    color: #0033C9;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 24px;
+  }
+  .markdown-body ul { padding-left: 20px; }
+  .markdown-body .prompt-card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #fff;
+    margin: 12px 0;
+    overflow: hidden;
+    transition: box-shadow 0.15s, border-color 0.15s;
+  }
+  .markdown-body .prompt-card:hover {
+    border-color: var(--primary);
+    box-shadow: 0 2px 8px rgba(16, 24, 40, 0.06);
+  }
+  .markdown-body .prompt-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+  .markdown-body .prompt-card-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+  }
+  .markdown-body .prompt-card-meta {
+    font-size: 12px;
+    color: var(--muted);
+    background: #f1f3f9;
+    border-radius: 6px;
+    padding: 2px 8px;
+  }
+  .markdown-body .prompt-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+  .markdown-body .prompt-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .markdown-body .prompt-action-btn:hover {
+    background: #eef2ff;
+    color: var(--primary);
+    border-color: var(--primary);
+  }
+  .markdown-body .prompt-action-btn.copied {
+    color: #00CF6A;
+    border-color: #00CF6A;
+  }
+  .markdown-body .prompt-toggle-btn .chevron-down-icon { display: none; }
+  .markdown-body .prompt-card[data-expanded="true"] .prompt-toggle-btn .chevron-right-icon { display: none; }
+  .markdown-body .prompt-card[data-expanded="true"] .prompt-toggle-btn .chevron-down-icon { display: inline-block; }
+  .markdown-body .prompt-card-body {
+    border-top: 1px solid var(--border);
+    padding: 14px;
+  }
+  .markdown-body .prompt-card-body.hidden { display: none; }
+  .markdown-body .prompt-card-body pre {
+    margin: 0;
+    padding: 14px;
+    position: static;
+    background: #f8f9fc;
+  }
+  .markdown-body .checklist {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+  }
+  .markdown-body .checklist li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .markdown-body .checklist li::marker {
+    display: none;
+  }
+  .check-item,
+  .metric-item,
+  .status-item {
+    margin-left: 24px;
+  }
+  .markdown-body .checklist li.status-item,
+  .markdown-body .checklist li.metric-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .issue-item,
+  .improvement-item {
+    margin-left: 56px;
+  }
+  .checklist-icon {
+    flex-shrink: 0;
+    display: inline-block;
+  }
+  .markdown-body code { background: #f1f3f9; padding: 2px 5px; border-radius: 4px; }
+  .markdown-body hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+  .markdown-body pre {
+    position: relative;
+    background: #f1f3f9;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 36px 14px 14px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  .markdown-body pre code {
+    background: none;
+    padding: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  .copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 12px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .copy-btn:hover { background: #eef2ff; color: var(--primary); }
+</style>
+</head>
+<body>
+<header>
+  <div class="hero-content">
+    <h1>AI Design Critic</h1>
+    <p class="subtitle">Đánh giá mức độ tuân thủ thương hiệu và chất lượng thiết kế bằng AI</p>
+  </div>
+</header>
+
+<div class="page dashboard-content">
+  <section class="summary-grid">
+    <div class="stat-card">
+      <div class="stat-label"><i data-lucide="image" class="stat-icon"></i>Tên thiết kế</div>
+      <div class="stat-value" id="summaryName">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label"><i data-lucide="bar-chart-3" class="stat-icon"></i>Điểm tổng thể</div>
+      <div class="stat-value score-value" id="summaryScore">—</div>
+      <div class="score-progress"><div class="score-progress-fill" id="summaryScoreBar"></div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label"><i data-lucide="badge-check" class="stat-icon"></i>Trạng thái</div>
+      <div class="stat-value"><span class="status-badge status-idle" id="summaryStatus"><i data-lucide="badge-check" class="status-badge-icon"></i>Chưa phân tích</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label"><i data-lucide="clock-3" class="stat-icon"></i>Thời gian đánh giá</div>
+      <div class="stat-value">
+        <div class="time-value" id="summaryTimeHour">—</div>
+        <div class="time-date" id="summaryTimeDate"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="card radar-card">
+    <h2>Biểu đồ radar — điểm theo hạng mục</h2>
+    <div class="radar-chart-wrap">
+      <canvas id="radarChart"></canvas>
+    </div>
+    <div class="placeholder" id="radarPlaceholder">Phân tích thiết kế để xem biểu đồ radar.</div>
+  </div>
+
+  <div class="container">
+  <div>
+    <div class="card">
+      <h2>Nhận diện thương hiệu</h2>
+      <div class="brand-row">
+        <img id="logoImg" src="/assets/logo-primary.png" alt="Brand logo" onerror="this.style.display='none'" />
+        <div>
+          <div id="brandName" style="font-weight:600; font-size:16px;">—</div>
+          <div id="brandTone" style="font-size:12px; color:var(--muted);"></div>
+        </div>
+      </div>
+      <div class="swatches" id="colorSwatches"></div>
+      <h2 style="margin-top:18px;">Quy chuẩn thương hiệu</h2>
+      <dl id="guidelineSummary"><div><dt>Đang tải...</dt></div></dl>
+    </div>
+
+    <div class="card">
+      <h2>Ảnh thiết kế</h2>
+      <div class="dropzone" id="dropzone">
+        <div>Nhấn hoặc kéo &amp; thả ảnh vào đây</div>
+        <input type="file" id="fileInput" accept="image/*" />
+      </div>
+      <div class="preview" id="preview"></div>
+
+      <label class="field-label" for="designName">Tên thiết kế (không bắt buộc)</label>
+      <input type="text" id="designName" placeholder="VD: Banner khuyến mãi Zalopay" />
+
+      <button class="analyze-btn" id="analyzeBtn" disabled>Phân tích</button>
+    </div>
+  </div>
+
+  <div class="card report-card">
+    <div class="report-card-header">
+      <h2>Báo cáo</h2>
+      <div class="export-menu">
+        <button class="export-btn" id="exportBtn" type="button" disabled>
+          <i data-lucide="download" class="stat-icon"></i>
+          Xuất báo cáo
+        </button>
+        <div class="export-dropdown" id="exportDropdown">
+          <button type="button" data-export="pdf"><i data-lucide="file-text" class="stat-icon"></i>Xuất PDF</button>
+          <button type="button" data-export="png"><i data-lucide="image" class="stat-icon"></i>Xuất PNG</button>
+          <button type="button" data-export="jpeg"><i data-lucide="image" class="stat-icon"></i>Xuất JPEG</button>
+          <button type="button" data-export="markdown"><i data-lucide="clipboard" class="stat-icon"></i>Sao chép Markdown</button>
+          <button type="button" data-export="share"><i data-lucide="link" class="stat-icon"></i>Chia sẻ liên kết</button>
+        </div>
+      </div>
+    </div>
+    <div id="reportContainer">
+      <div class="placeholder">Tải lên ảnh thiết kế và nhấn "Phân tích" để tạo báo cáo.</div>
+    </div>
+  </div>
+  </div>
+</div>
+
+<script>
+  const fileInput = document.getElementById('fileInput');
+  const dropzone = document.getElementById('dropzone');
+  const preview = document.getElementById('preview');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const reportContainer = document.getElementById('reportContainer');
+  const designNameInput = document.getElementById('designName');
+  const summaryName = document.getElementById('summaryName');
+  const summaryScore = document.getElementById('summaryScore');
+  const summaryScoreBar = document.getElementById('summaryScoreBar');
+  const summaryStatus = document.getElementById('summaryStatus');
+  const summaryTimeHour = document.getElementById('summaryTimeHour');
+  const summaryTimeDate = document.getElementById('summaryTimeDate');
+  const exportBtn = document.getElementById('exportBtn');
+  const exportDropdown = document.getElementById('exportDropdown');
+
+  let lastReportMarkdown = '';
+  let lastDesignName = '';
+
+  lucide.createIcons();
+
+  function setStatus(label, className) {
+    summaryStatus.className = `status-badge ${className}`;
+    summaryStatus.innerHTML = `<i data-lucide="badge-check" class="status-badge-icon"></i>${label}`;
+    lucide.createIcons();
+  }
+
+  // --- Radar chart ---
+  const RADAR_CATEGORIES = [
+    { key: 'logoCompliance', label: 'Logo' },
+    { key: 'trademarkCompliance', label: 'Trademark' },
+    { key: 'colorCompliance', label: 'Màu sắc' },
+    { key: 'typographyCompliance', label: 'Typography' },
+    { key: 'visualHierarchy', label: 'Visual hierarchy' },
+  ];
+  const radarCard = document.querySelector('.radar-card');
+  const radarCanvas = document.getElementById('radarChart');
+  let radarChart = null;
+
+  function renderRadarChart(categories) {
+    const scores = RADAR_CATEGORIES.map((c) => {
+      const score = categories?.[c.key]?.score;
+      return typeof score === 'number' ? score : 0;
+    });
+
+    radarCard.classList.add('has-data');
+
+    if (radarChart) {
+      radarChart.data.datasets[0].data = scores;
+      radarChart.update();
+      return;
+    }
+
+    radarChart = new Chart(radarCanvas, {
+      type: 'radar',
+      data: {
+        labels: RADAR_CATEGORIES.map((c) => c.label),
+        datasets: [{
+          label: 'Điểm theo hạng mục',
+          data: scores,
+          backgroundColor: 'rgba(0, 207, 106, 0.25)',
+          borderColor: '#00CF6A',
+          pointBackgroundColor: '#0033C9',
+          borderWidth: 2,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          r: {
+            min: 0,
+            max: 10,
+            ticks: { stepSize: 2, color: '#6b7280' },
+            grid: { color: '#e0e3eb' },
+            angleLines: { color: '#e0e3eb' },
+            pointLabels: { color: '#1a1d29', font: { size: 12 } },
+          },
+        },
+        plugins: {
+          legend: { labels: { color: '#1a1d29' } },
+        },
+      },
+    });
+  }
+
+  let selectedFile = null;
+
+  // --- Brand guideline / logo ---
+  fetch('/brand-guideline')
+    .then((r) => r.json())
+    .then((data) => {
+      const bg = data.brandGuideline;
+      const summaryEl = document.getElementById('guidelineSummary');
+      if (!bg) {
+        summaryEl.innerHTML = '<div><dt>Không tìm thấy brand-guideline.json</dt></div>';
+        return;
+      }
+      document.getElementById('brandName').textContent = bg.brandName || '—';
+      document.getElementById('brandTone').textContent = (bg.tone || []).join(', ');
+
+      const swatches = document.getElementById('colorSwatches');
+      const colors = bg.colors || {};
+      const items = [];
+      if (colors.primary) items.push({ label: 'Màu chính', hex: colors.primary.hex });
+      if (colors.secondary) items.push({ label: 'Màu phụ', hex: colors.secondary.hex });
+      (colors.accent?.allowedColors || []).forEach((hex, i) => items.push({ label: 'Màu nhấn ' + (i + 1), hex }));
+      swatches.innerHTML = items.map((c) =>
+        `<div class="swatch"><span class="swatch-color" style="background:${c.hex}"></span>${c.label} ${c.hex}</div>`
+      ).join('');
+
+      summaryEl.innerHTML = `
+        <div><dt>Font tiêu đề</dt><span>${bg.typography?.headingFont || '—'}</span></div>
+        <div><dt>Font nội dung</dt><span>${bg.typography?.bodyFont || '—'}</span></div>
+        <div><dt>Tỷ lệ màu</dt><span>${bg.brandRules?.colorBalance ? Object.entries(bg.brandRules.colorBalance).map(([k,v]) => `${k}: ${v}%`).join(', ') : '—'}</span></div>
+        <div><dt>Độ tương phản tối thiểu</dt><span>${bg.brandRules?.minimumContrast || '—'}</span></div>
+        <div><dt>Yêu cầu logo</dt><span>${bg.logo?.rules?.mustAppear ? 'Có' : 'Không'}</span></div>
+        <div><dt>Vị trí logo ưu tiên</dt><span>${(bg.logo?.rules?.preferredPositions || []).join(', ') || '—'}</span></div>
+      `;
+    })
+    .catch(() => {
+      document.getElementById('guidelineSummary').innerHTML = '<div><dt>Không thể tải brand-guideline.json</dt></div>';
+    });
+
+  // --- File selection ---
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length) handleFile(e.target.files[0]);
+  });
+
+  function handleFile(file) {
+    if (!file.type.startsWith('image/')) {
+      alert('Vui lòng chọn một tệp hình ảnh.');
+      return;
+    }
+    selectedFile = file;
+    const url = URL.createObjectURL(file);
+    preview.innerHTML = `<div class="preview-wrap"><img src="${url}" alt="Preview" /></div>`;
+    analyzeBtn.disabled = false;
+  }
+
+  // --- Annotation layer ---
+  // Each annotation follows the shape: { label, severity, x, y }
+  // - label: short description of the issue/observation
+  // - severity: 'critical' (🔴 lỗi nghiêm trọng), 'warning' (🟡 cần cải thiện), 'ok' (🟢 đạt yêu cầu)
+  // - x, y: position as a percentage (0-100) of the image's width/height,
+  //         so markers stay aligned regardless of the rendered image size.
+  // This structure is ready for the AI to generate coordinates automatically in the future.
+  const SEVERITY_ICONS = { critical: '🔴', warning: '🟡', ok: '🟢' };
+
+  function renderAnnotations(annotations) {
+    const wrap = preview.querySelector('.preview-wrap');
+    if (!wrap) return;
+
+    wrap.querySelectorAll('.annotation-marker').forEach((el) => el.remove());
+
+    (annotations || []).forEach(({ label, severity, x, y }) => {
+      const marker = document.createElement('div');
+      marker.className = `annotation-marker severity-${severity || 'warning'}`;
+      marker.style.left = `${x}%`;
+      marker.style.top = `${y}%`;
+
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+
+      const tooltip = document.createElement('span');
+      tooltip.className = 'annotation-tooltip';
+      tooltip.textContent = `${SEVERITY_ICONS[severity] || ''} ${label}`;
+
+      marker.appendChild(dot);
+      marker.appendChild(tooltip);
+      wrap.appendChild(marker);
+    });
+  }
+
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result;
+        const base64 = result.substring(result.indexOf(',') + 1);
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // --- Copy buttons for code blocks (e.g. AI redesign prompts) ---
+  function addCopyButtons(container) {
+    container.querySelectorAll('pre').forEach((pre) => {
+      if (pre.closest('.prompt-card-body')) return;
+      if (pre.querySelector('.copy-btn')) return;
+      const code = pre.querySelector('code') || pre;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'copy-btn';
+      btn.textContent = 'Copy';
+      btn.addEventListener('click', () => {
+        navigator.clipboard.writeText(code.textContent).then(() => {
+          btn.textContent = 'Đã copy!';
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+      });
+      pre.appendChild(btn);
+    });
+  }
+
+  // --- Prompt cards: expand/collapse and copy ---
+  reportContainer.addEventListener('click', (e) => {
+    const toggleBtn = e.target.closest('[data-action="toggle-prompt"]');
+    if (toggleBtn) {
+      const card = toggleBtn.closest('.prompt-card');
+      const body = card.querySelector('.prompt-card-body');
+      const expanded = card.getAttribute('data-expanded') === 'true';
+      card.setAttribute('data-expanded', expanded ? 'false' : 'true');
+      body.classList.toggle('hidden', expanded);
+      toggleBtn.querySelector('.toggle-label').textContent = expanded ? 'Xem prompt' : 'Ẩn prompt';
+      return;
+    }
+
+    const copyBtn = e.target.closest('[data-action="copy-prompt"]');
+    if (copyBtn) {
+      const card = copyBtn.closest('.prompt-card');
+      const pre = card.querySelector('.prompt-card-body pre');
+      navigator.clipboard.writeText(pre.textContent).then(() => {
+        copyBtn.classList.add('copied');
+        setTimeout(() => copyBtn.classList.remove('copied'), 1500);
+      });
+    }
+  });
+
+  // --- Export report ---
+  function slugify(name) {
+    return (name || 'bao-cao')
+      .toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '') || 'bao-cao';
+  }
+
+  function downloadDataUrl(dataUrl, filename) {
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  async function captureReportCanvas() {
+    return html2canvas(reportContainer, {
+      backgroundColor: '#ffffff',
+      scale: 2,
+      useCORS: true,
+    });
+  }
+
+  async function exportAsImage(format) {
+    const canvas = await captureReportCanvas();
+    const mime = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+    const dataUrl = canvas.toDataURL(mime, 0.95);
+    downloadDataUrl(dataUrl, `${slugify(lastDesignName)}.${format === 'jpeg' ? 'jpg' : 'png'}`);
+  }
+
+  async function exportAsPdf() {
+    const canvas = await captureReportCanvas();
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('p', 'pt', 'a4');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pageWidth;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    const pxPerPage = (canvas.width * pageHeight) / imgWidth;
+    let renderedHeight = 0;
+    let pageIndex = 0;
+
+    while (renderedHeight < canvas.height) {
+      const sliceHeight = Math.min(pxPerPage, canvas.height - renderedHeight);
+      const pageCanvas = document.createElement('canvas');
+      pageCanvas.width = canvas.width;
+      pageCanvas.height = sliceHeight;
+      const ctx = pageCanvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+      ctx.drawImage(canvas, 0, renderedHeight, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+
+      const pageDataUrl = pageCanvas.toDataURL('image/png');
+      const pageImgHeight = (sliceHeight * imgWidth) / canvas.width;
+
+      if (pageIndex > 0) pdf.addPage();
+      pdf.addImage(pageDataUrl, 'PNG', 0, 0, imgWidth, pageImgHeight);
+
+      renderedHeight += sliceHeight;
+      pageIndex += 1;
+    }
+
+    pdf.save(`${slugify(lastDesignName)}.pdf`);
+  }
+
+  async function copyMarkdown() {
+    await navigator.clipboard.writeText(lastReportMarkdown);
+  }
+
+  async function copyShareLink() {
+    await navigator.clipboard.writeText(window.location.href);
+  }
+
+  function flashExportItem(btn, text) {
+    const original = btn.innerHTML;
+    btn.innerHTML = `<i data-lucide="check" class="stat-icon"></i>${text}`;
+    lucide.createIcons();
+    setTimeout(() => {
+      btn.innerHTML = original;
+      lucide.createIcons();
+    }, 1500);
+  }
+
+  exportBtn.addEventListener('click', () => {
+    if (exportBtn.disabled) return;
+    exportDropdown.classList.toggle('open');
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!exportDropdown.contains(e.target) && e.target !== exportBtn && !exportBtn.contains(e.target)) {
+      exportDropdown.classList.remove('open');
+    }
+  });
+
+  exportDropdown.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-export]');
+    if (!btn) return;
+
+    try {
+      switch (btn.dataset.export) {
+        case 'pdf':
+          await exportAsPdf();
+          break;
+        case 'png':
+          await exportAsImage('png');
+          break;
+        case 'jpeg':
+          await exportAsImage('jpeg');
+          break;
+        case 'markdown':
+          await copyMarkdown();
+          flashExportItem(btn, 'Đã sao chép!');
+          break;
+        case 'share':
+          await copyShareLink();
+          flashExportItem(btn, 'Đã sao chép liên kết!');
+          break;
+      }
+    } catch (err) {
+      alert(`Xuất báo cáo thất bại: ${err.message}`);
+    }
+
+    if (btn.dataset.export === 'pdf' || btn.dataset.export === 'png' || btn.dataset.export === 'jpeg') {
+      exportDropdown.classList.remove('open');
+    }
+  });
+
+  // --- Analyze ---
+  analyzeBtn.addEventListener('click', async () => {
+    if (!selectedFile) return;
+
+    analyzeBtn.disabled = true;
+    reportContainer.innerHTML = '<div class="placeholder"><span class="spinner"></span>Đang phân tích thiết kế...</div>';
+    setStatus('Đang phân tích...', 'status-loading');
+
+    try {
+      const base64 = await fileToBase64(selectedFile);
+      const body = {
+        image: { base64, mimeType: selectedFile.type },
+      };
+      const designName = designNameInput.value.trim();
+      if (designName) body.designName = designName;
+
+      const res = await fetch('/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        reportContainer.innerHTML = `<div class="error-box">Lỗi: ${data.error || res.statusText}</div>`;
+        setStatus('Lỗi', 'status-error');
+        return;
+      }
+
+      const html = marked.parse(data.report || '_Không có báo cáo nào được trả về._');
+      reportContainer.innerHTML = `<div class="markdown-body">${html}</div>`;
+      addCopyButtons(reportContainer);
+      lucide.createIcons();
+
+      summaryName.textContent = data.designName || designName || '—';
+      summaryScore.textContent = typeof data.overallScore === 'number' ? `${data.overallScore}/10` : '—';
+      summaryScoreBar.style.width = typeof data.overallScore === 'number' ? `${(data.overallScore / 10) * 100}%` : '0%';
+      const now = new Date();
+      summaryTimeHour.textContent = now.toLocaleTimeString('vi-VN');
+      summaryTimeDate.textContent = now.toLocaleDateString('vi-VN');
+      setStatus('Hoàn thành', 'status-done');
+      renderRadarChart(data.categories);
+      renderAnnotations(data.annotations);
+
+      lastReportMarkdown = data.report || '';
+      lastDesignName = data.designName || designName || 'thiet-ke';
+      exportBtn.disabled = false;
+    } catch (err) {
+      reportContainer.innerHTML = `<div class="error-box">Yêu cầu thất bại: ${err.message}</div>`;
+      setStatus('Lỗi', 'status-error');
+    } finally {
+      analyzeBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
