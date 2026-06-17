@@ -1,8 +1,8 @@
 """
 schemas.py — Container StockData và DataFetcher facade.
 
-DataFetcher kết hợp MarketDataFetcher + FinancialDataFetcher + CompanyDataFetcher
-thành một điểm truy cập duy nhất.
+DataFetcher là điểm truy cập duy nhất cho toàn bộ data layer.
+Tất cả calls vnstock đều đi qua VnstockClient (một wrapper duy nhất).
 
 Sử dụng:
     fetcher = DataFetcher(cache_dir=".cache", source="VCI")
@@ -18,10 +18,8 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from .cache import CacheManager
-from .company import CompanyDataFetcher
-from .financials import FinancialDataFetcher
-from .market import MarketDataFetcher
-from .models import CompanyInfo, FinancialStatements, PriceHistory
+from .models import CompanyInfo, Exchange, FinancialStatements, PriceHistory, Sector
+from .vnstock_client import VnstockClient
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +38,8 @@ class StockData(BaseModel):
     current_price: Optional[float] = None
     fetched_at: datetime = Field(default_factory=datetime.now)
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     @property
     def shares_million(self) -> float:
         """Số lượng cổ phiếu lưu hành (triệu cổ)."""
@@ -52,8 +52,6 @@ class StockData(BaseModel):
             return round(self.current_price * self.shares_million / 1_000, 2)
         return None
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
 
 # ------------------------------------------------------------------ #
 # DataFetcher — facade duy nhất cho toàn bộ data layer                 #
@@ -61,7 +59,7 @@ class StockData(BaseModel):
 
 class DataFetcher:
     """
-    Facade kết hợp tất cả các fetcher chuyên biệt.
+    Facade kết hợp tất cả dữ liệu thông qua VnstockClient.
     Một lần gọi fetch_all(ticker) → StockData đầy đủ, cache sẵn cho analysis.
     """
 
@@ -73,11 +71,8 @@ class DataFetcher:
         price_years: int = 5,
     ) -> None:
         cache = CacheManager(cache_dir=cache_dir)
-        self._market    = MarketDataFetcher(cache=cache, source=source)
-        self._financials = FinancialDataFetcher(
-            cache=cache, source=source, n_periods=n_periods
-        )
-        self._company   = CompanyDataFetcher(cache=cache, source=source)
+        self._client = VnstockClient(cache=cache, source=source)
+        self._n_periods = n_periods
         self._price_years = price_years
 
     # ------------------------------------------------------------------ #
@@ -88,47 +83,55 @@ class DataFetcher:
         """
         Lấy toàn bộ dữ liệu cho một mã cổ phiếu.
 
-        Thứ tự: company info → price history → financial statements.
-        Mỗi bước lỗi riêng lẻ sẽ được log nhưng không làm dừng toàn bộ.
+        Thứ tự: company info → price history → current price → financial statements.
+        Mỗi bước lỗi riêng lẻ được log nhưng không làm dừng toàn bộ.
         """
         ticker = ticker.upper()
         logger.info("[DataFetcher] Bắt đầu fetch %s", ticker)
 
+        _fallback_company = CompanyInfo(
+            ticker=ticker,
+            name=ticker,
+            exchange=Exchange.HOSE,
+            sector=Sector.UNKNOWN,
+            shares_outstanding=1.0,
+        )
+
         company = self._safe_fetch(
             f"company_info({ticker})",
-            lambda: self._company.get_company_info(ticker),
-            fallback=CompanyInfo(
-                ticker=ticker,
-                name=ticker,
-                exchange=__import__(
-                    "src.data.models", fromlist=["Exchange"]
-                ).Exchange.HOSE,
-                shares_outstanding=1.0,
-            ),
+            lambda: self._client.get_company_info(ticker),
+            fallback=_fallback_company,
         )
 
         price_history = self._safe_fetch(
             f"price_history({ticker})",
-            lambda: self._market.get_price_history(ticker, years=self._price_years),
+            lambda: self._client.get_price_history(ticker, days=self._price_years * 365),
             fallback=PriceHistory(ticker=ticker, candles=[]),
         )
 
         current_price = self._safe_fetch(
             f"current_price({ticker})",
-            lambda: price_history.current_price or self._market.get_current_price(ticker),
-            fallback=None,
+            lambda: self._client.get_current_price(ticker),
+            fallback=price_history.current_price,
         )
 
         statements = self._safe_fetch(
             f"financials({ticker})",
-            lambda: self._financials.get_all(ticker),
+            lambda: self._client.get_financial_statements(
+                ticker, n_periods=self._n_periods
+            ),
             fallback=FinancialStatements(ticker=ticker),
         )
 
-        # Cập nhật market_cap nếu có giá
+        # Cập nhật market_cap nếu chưa có
         if current_price and company.market_cap is None:
-            object.__setattr__(company, "market_cap",
-                               round(current_price * company.shares_outstanding / 1_000, 2))
+            try:
+                object.__setattr__(
+                    company, "market_cap",
+                    round(current_price * company.shares_outstanding / 1_000, 2),
+                )
+            except Exception:
+                pass
 
         data = StockData(
             ticker=ticker,
@@ -137,6 +140,7 @@ class DataFetcher:
             price_history=price_history,
             current_price=current_price,
         )
+
         logger.info(
             "[DataFetcher] Hoàn thành %s | giá=%.0f | kỳ tài chính=%d",
             ticker,
@@ -150,33 +154,21 @@ class DataFetcher:
     # ------------------------------------------------------------------ #
 
     def get_company(self, ticker: str) -> CompanyInfo:
-        return self._company.get_company_info(ticker.upper())
+        return self._client.get_company_info(ticker.upper())
 
     def get_price_history(self, ticker: str, years: int = 5) -> PriceHistory:
-        return self._market.get_price_history(ticker.upper(), years=years)
+        return self._client.get_price_history(ticker.upper(), days=years * 365)
 
     def get_current_price(self, ticker: str) -> Optional[float]:
-        return self._market.get_current_price(ticker.upper())
+        return self._client.get_current_price(ticker.upper())
 
     def get_statements(self, ticker: str) -> FinancialStatements:
-        return self._financials.get_all(ticker.upper())
-
-    def get_shareholders(self, ticker: str) -> list[dict]:
-        return self._company.get_shareholders(ticker.upper())
-
-    def get_officers(self, ticker: str) -> list[dict]:
-        return self._company.get_officers(ticker.upper())
-
-    def get_events(self, ticker: str) -> list[dict]:
-        return self._company.get_events(ticker.upper())
-
-    def get_dividends(self, ticker: str) -> list[dict]:
-        return self._company.get_dividends(ticker.upper())
+        return self._client.get_financial_statements(ticker.upper(), n_periods=self._n_periods)
 
     def get_index_history(
         self, index_symbol: str = "VNINDEX", years: int = 1
     ) -> PriceHistory:
-        return self._market.get_index_history(index_symbol, years=years)
+        return self._client.get_index_history(index_symbol, days=years * 365)
 
     # ------------------------------------------------------------------ #
     # Helper                                                                #

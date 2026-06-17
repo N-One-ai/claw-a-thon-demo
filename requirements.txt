@@ -4,7 +4,7 @@ pydantic>=2.6.0
 pydantic-settings>=2.2.0
 
 # Vietnamese stock market data
-vnstock>=3.0.0
+vnstock>=4.0.0
 
 # Data processing
 pandas>=2.2.0
