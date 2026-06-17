@@ -1,0 +1,103 @@
+# WACC mặc định theo ngành — dùng khi không tính được WACC từ dữ liệu thực
+# Công thức: WACC = Ke*E/(D+E) + Kd*(1-T)*D/(D+E)
+# Risk-free rate: 4.8% (TP CP 10Y)
+# Equity risk premium (VN): 8.5%
+
+# Kịch bản: base | pessimistic (WACC+2%) | optimistic (WACC-1%)
+# Tăng trưởng terminal: 3% (tương đương lạm phát mục tiêu VN dài hạn)
+
+banking:
+  base_wacc: 0.12              # 12% — chi phí vốn ngân hàng thấp hơn
+  terminal_growth: 0.03
+  fcf_growth_base: 0.12
+  fcf_growth_pessimistic: 0.06
+  fcf_growth_optimistic: 0.18
+  tax_rate: 0.20
+
+real_estate:
+  base_wacc: 0.14
+  terminal_growth: 0.03
+  fcf_growth_base: 0.10
+  fcf_growth_pessimistic: 0.03
+  fcf_growth_optimistic: 0.18
+  tax_rate: 0.20
+
+technology:
+  base_wacc: 0.13
+  terminal_growth: 0.04        # Tăng trưởng cao hơn dài hạn
+  fcf_growth_base: 0.20
+  fcf_growth_pessimistic: 0.10
+  fcf_growth_optimistic: 0.30
+  tax_rate: 0.20
+
+consumer_staples:
+  base_wacc: 0.11
+  terminal_growth: 0.03
+  fcf_growth_base: 0.10
+  fcf_growth_pessimistic: 0.05
+  fcf_growth_optimistic: 0.15
+  tax_rate: 0.20
+
+consumer_discretionary:
+  base_wacc: 0.13
+  terminal_growth: 0.03
+  fcf_growth_base: 0.12
+  fcf_growth_pessimistic: 0.05
+  fcf_growth_optimistic: 0.20
+  tax_rate: 0.20
+
+industrials:
+  base_wacc: 0.12
+  terminal_growth: 0.03
+  fcf_growth_base: 0.10
+  fcf_growth_pessimistic: 0.04
+  fcf_growth_optimistic: 0.16
+  tax_rate: 0.20
+
+materials:
+  base_wacc: 0.13
+  terminal_growth: 0.025
+  fcf_growth_base: 0.08
+  fcf_growth_pessimistic: 0.02
+  fcf_growth_optimistic: 0.15
+  tax_rate: 0.20
+
+energy:
+  base_wacc: 0.12
+  terminal_growth: 0.025
+  fcf_growth_base: 0.08
+  fcf_growth_pessimistic: 0.02
+  fcf_growth_optimistic: 0.14
+  tax_rate: 0.20
+
+utilities:
+  base_wacc: 0.10              # Ổn định, rủi ro thấp
+  terminal_growth: 0.025
+  fcf_growth_base: 0.07
+  fcf_growth_pessimistic: 0.03
+  fcf_growth_optimistic: 0.12
+  tax_rate: 0.20
+
+healthcare:
+  base_wacc: 0.13
+  terminal_growth: 0.04
+  fcf_growth_base: 0.18
+  fcf_growth_pessimistic: 0.08
+  fcf_growth_optimistic: 0.28
+  tax_rate: 0.20
+
+financials:
+  base_wacc: 0.12
+  terminal_growth: 0.03
+  fcf_growth_base: 0.10
+  fcf_growth_pessimistic: 0.04
+  fcf_growth_optimistic: 0.16
+  tax_rate: 0.20
+
+unknown:
+  base_wacc: 0.13
+  terminal_growth: 0.03
+  fcf_growth_base: 0.10
+  fcf_growth_pessimistic: 0.04
+  fcf_growth_optimistic: 0.16
+  tax_rate: 0.20

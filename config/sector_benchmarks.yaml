@@ -1,0 +1,117 @@
+# Benchmark định giá theo ngành — cập nhật hàng quý
+# Nguồn tham chiếu: SSI Research, VCSC, VN-Index consensus
+
+banking:
+  pe_benchmark: 12.0
+  pb_benchmark: 1.8
+  weights:
+    pe: 0.25
+    pb: 0.35
+    graham: 0.20
+    dcf: 0.20
+  notes: "P/B quan trọng nhất với ngân hàng (tài sản = vốn)"
+
+real_estate:
+  pe_benchmark: 18.0
+  pb_benchmark: 2.2
+  weights:
+    pe: 0.25
+    pb: 0.30
+    graham: 0.15
+    dcf: 0.30
+  notes: "DCF + P/B phù hợp với bất động sản (tài sản dài hạn)"
+
+technology:
+  pe_benchmark: 25.0
+  pb_benchmark: 4.0
+  weights:
+    pe: 0.25
+    pb: 0.10
+    graham: 0.15
+    dcf: 0.50
+  notes: "DCF chiếm trọng số cao vì tăng trưởng là yếu tố cốt lõi"
+
+consumer_staples:
+  pe_benchmark: 20.0
+  pb_benchmark: 3.0
+  weights:
+    pe: 0.30
+    pb: 0.20
+    graham: 0.25
+    dcf: 0.25
+
+consumer_discretionary:
+  pe_benchmark: 22.0
+  pb_benchmark: 3.5
+  weights:
+    pe: 0.30
+    pb: 0.15
+    graham: 0.20
+    dcf: 0.35
+
+industrials:
+  pe_benchmark: 16.0
+  pb_benchmark: 2.0
+  weights:
+    pe: 0.30
+    pb: 0.25
+    graham: 0.20
+    dcf: 0.25
+
+materials:
+  pe_benchmark: 14.0
+  pb_benchmark: 1.8
+  weights:
+    pe: 0.30
+    pb: 0.30
+    graham: 0.25
+    dcf: 0.15
+  notes: "Chu kỳ nguyên vật liệu — P/B và P/E quan trọng"
+
+energy:
+  pe_benchmark: 12.0
+  pb_benchmark: 1.5
+  weights:
+    pe: 0.30
+    pb: 0.30
+    graham: 0.20
+    dcf: 0.20
+
+utilities:
+  pe_benchmark: 15.0
+  pb_benchmark: 2.0
+  weights:
+    pe: 0.35
+    pb: 0.25
+    graham: 0.20
+    dcf: 0.20
+  notes: "Ổn định, cổ tức cao — P/E và P/B là chỉ số chính"
+
+healthcare:
+  pe_benchmark: 28.0
+  pb_benchmark: 4.5
+  weights:
+    pe: 0.25
+    pb: 0.15
+    graham: 0.15
+    dcf: 0.45
+  notes: "Tăng trưởng dài hạn — DCF và P/E cao phản ánh tiềm năng"
+
+financials:
+  pe_benchmark: 14.0
+  pb_benchmark: 2.0
+  weights:
+    pe: 0.30
+    pb: 0.30
+    graham: 0.20
+    dcf: 0.20
+
+unknown:
+  pe_benchmark: 16.0
+  pb_benchmark: 2.0
+  weights:
+    pe: 0.25
+    pb: 0.25
+    graham: 0.25
+    dcf: 0.25
+  notes: "Trọng số bằng nhau khi chưa xác định được ngành"

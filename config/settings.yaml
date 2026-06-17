@@ -1,0 +1,49 @@
+app:
+  name: "N-One Stock Analysis Agent"
+  version: "1.0.0"
+  language: "vi"               # Ngôn ngữ output mặc định
+
+llm:
+  model: "claude-sonnet-4-6"
+  max_tokens: 8192
+  temperature: 0.2             # Thấp để phân tích nhất quán
+
+data:
+  source: "VCI"                # Nguồn dữ liệu vnstock: VCI | TCBS
+  default_price_days: 365      # Số ngày lịch sử giá mặc định
+  default_financial_periods: 8 # Số kỳ BCTC (quý) mặc định
+
+cache:
+  dir: ".cache"
+  ttl:
+    price_current: 900         # 15 phút
+    price_history: 86400       # 1 ngày
+    financial: 7776000         # 90 ngày
+    company_info: 604800       # 7 ngày
+    news: 3600                 # 1 giờ
+    index: 900                 # 15 phút
+
+output:
+  formats:                     # Định dạng output được hỗ trợ
+    - terminal
+    - json
+    - pdf
+  default_format: terminal
+  pdf_dir: "reports"
+
+market:
+  risk_free_rate: 0.048        # Lợi suất TP Chính phủ VN 10Y — cập nhật hàng quý
+  index_symbol: "VNINDEX"
+  currency: "VND"
+
+valuation:
+  scenario_probabilities:
+    pessimistic: 0.30
+    base: 0.50
+    optimistic: 0.20
+  discount_labels:             # Ngưỡng % chiết khấu → nhãn
+    very_attractive: 30        # > 30% chiết khấu
+    attractive: 15             # 15–30%
+    neutral_band: 15           # ±15%
+    expensive: 15              # premium 15–30%
+    very_expensive: 30         # premium > 30%

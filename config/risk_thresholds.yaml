@@ -1,0 +1,55 @@
+# Ngưỡng cảnh báo rủi ro — dùng trong RiskAnalyzer để gắn cờ
+
+leverage:
+  debt_to_equity:
+    high: 2.0                  # D/E > 2 → cờ cao
+    very_high: 4.0             # D/E > 4 → cờ rất cao
+  debt_to_assets:
+    high: 0.60
+    very_high: 0.80
+
+coverage:
+  interest_coverage:
+    danger: 1.5                # EBIT/Lãi vay < 1.5 → nguy hiểm
+    warning: 3.0               # < 3 → cần theo dõi
+
+volatility:
+  beta:
+    high: 1.5                  # Beta > 1.5 → biến động cao hơn thị trường nhiều
+    very_high: 2.0
+  annualized_vol_pct:
+    high: 40.0                 # Annualized vol > 40% → cổ phiếu rất biến động
+    very_high: 60.0
+
+liquidity:
+  avg_daily_volume_min: 100000 # < 100k cp/ngày → thanh khoản thấp
+
+earnings:
+  eps_stability:
+    # Độ lệch chuẩn EPS / EPS trung bình (CV)
+    unstable_cv: 0.50          # CV > 50% → không ổn định
+    very_unstable_cv: 1.00
+
+cash_flow:
+  negative_fcf_quarters: 2    # FCF âm >= 2 quý liên tiếp → cờ cảnh báo
+
+growth:
+  revenue_decline_yoy: -0.10  # Doanh thu giảm > 10% YoY → cờ
+
+# Thang điểm rủi ro tổng hợp
+# Mỗi cờ có điểm, tổng điểm → mức rủi ro tổng
+risk_scoring:
+  flag_weights:
+    HIGH_LEVERAGE: 2
+    NEGATIVE_COVERAGE: 3
+    HIGH_BETA: 1
+    EARNINGS_INSTABILITY: 2
+    NEGATIVE_FCF: 2
+    DECLINING_REVENUE: 2
+    LOW_LIQUIDITY: 1
+    CONCENTRATION_RISK: 1
+  thresholds:
+    low: 2
+    medium: 4
+    high: 7
+    # > 7 → VERY_HIGH
