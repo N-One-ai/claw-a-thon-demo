@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -12,12 +11,13 @@ logger = logging.getLogger(__name__)
 
 # TTL mặc định (giây) theo loại dữ liệu
 DEFAULT_TTL: dict[str, int] = {
-    "price_current": 15 * 60,        # 15 phút
+    "price_current": 2 * 60,          # 2 phút — near real-time
     "price_history": 24 * 60 * 60,   # 1 ngày
     "financial": 90 * 24 * 60 * 60,  # 90 ngày
     "company_info": 7 * 24 * 60 * 60,# 7 ngày
     "news": 60 * 60,                  # 1 giờ
     "index": 15 * 60,                 # 15 phút
+    "reports": 24 * 60 * 60,         # 1 ngày (báo cáo AI)
 }
 
 

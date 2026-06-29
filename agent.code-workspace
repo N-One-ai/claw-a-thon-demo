@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../../../AI-Design-Critic-Agent"
+		}
+	],
+	"settings": {
+		"claudeCode.allowDangerouslySkipPermissions": true
+	}
+}

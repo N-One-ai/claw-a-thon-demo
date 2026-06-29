@@ -200,6 +200,8 @@ class AnalysisPipeline:
         custom_growth: Optional[float] = None,
         scenario_probabilities: Optional[dict[str, float]] = None,
     ) -> None:
+        from .data.cache import CacheManager
+        self._cache = CacheManager(cache_dir=cache_dir)
         self._fetcher = DataFetcher(
             cache_dir=cache_dir,
             source=source,
@@ -247,6 +249,9 @@ class AnalysisPipeline:
         wacc = custom_wacc or self._custom_wacc
         growth = custom_growth or self._custom_growth
         errors: dict[str, str] = {}
+
+        # ── Step 0: Invalidate price cache for fresh real-time price ── #
+        self._cache.invalidate("price_current", ticker)
 
         # ── Step 1: Fetch data ──────────────────────────────────────── #
         logger.info("[Pipeline] %s — Bước 1: Lấy dữ liệu", ticker)

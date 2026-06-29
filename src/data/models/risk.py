@@ -5,6 +5,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from .price import OHLCVPoint
+
 
 class RiskLevel(str, Enum):
     LOW = "Thấp"
@@ -54,6 +56,9 @@ class TechnicalSignal(BaseModel):
     high_52w: Optional[float] = None
     low_52w: Optional[float] = None
     position_52w_pct: Optional[float] = None
+
+    # Chuỗi thời gian 200 phiên gần nhất — dùng cho biểu đồ frontend
+    chart_data: list[OHLCVPoint] = Field(default_factory=list)
 
 
 class RiskProfile(BaseModel):

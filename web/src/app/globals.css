@@ -1,0 +1,253 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-base: #0C1017;
+  --bg-surface: #10151C;
+  --bg-card: #141B24;
+  --bg-card-hover: #1A2230;
+  --card-border: rgba(255,255,255,0.03);
+  --card-border-hover: rgba(255,255,255,0.06);
+  --card-radius: 16px;
+  --card-shadow: 0 2px 10px rgba(0,0,0,0.35);
+  --border: rgba(255,255,255,0.03);
+  --border-light: rgba(255,255,255,0.06);
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --accent: #A3FF12;
+  --accent-soft: #7CFF3B;
+  --green: #7CFF3B;
+  --red: #FF5A76;
+  --yellow: #FFB020;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  overflow-x: hidden;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: "Inter", system-ui, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar ─────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-surface);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* ── Selection ─────────────────────────────── */
+::selection {
+  background: rgba(163, 255, 18, 0.2);
+  color: #e2e8f0;
+}
+
+/* ── Mobile-first touch & spacing ─────────── */
+@layer base {
+  button, a[role="button"], [role="button"] {
+    min-height: 44px;
+  }
+  input, select, textarea {
+    min-height: 48px;
+  }
+  @screen sm {
+    button, a[role="button"], [role="button"] {
+      min-height: unset;
+    }
+    input, select, textarea {
+      min-height: unset;
+    }
+  }
+}
+
+/* ── Utility classes ───────────────────────── */
+@layer utilities {
+  .touch-target {
+    @apply min-h-[44px];
+  }
+
+  .card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+  }
+
+  .card-hover {
+    transition: all 200ms ease;
+  }
+  .card-hover:hover {
+    background-color: var(--bg-card-hover);
+    border-color: var(--card-border-hover);
+  }
+
+  .num {
+    @apply font-mono tabular-nums;
+  }
+
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  .label-xs {
+    @apply text-xs font-medium tracking-wider uppercase text-slate-500;
+  }
+
+  .gradient-text {
+    background-image: linear-gradient(to right, #A3FF12, #7CFF3B, #2DFF7A);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .glass {
+    @apply bg-white/[0.03] backdrop-blur-sm border border-white/[0.06];
+  }
+
+  .skeleton {
+    @apply bg-gradient-to-r from-bg-card via-bg-elevated to-bg-card bg-[length:200%_100%] animate-shimmer rounded;
+  }
+}
+
+/* ── Hero Banner animations ─────────────────── */
+@keyframes heroFade {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%       { transform: translateY(-18px) scale(1.04); }
+}
+
+@keyframes orbFloatAlt {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%       { transform: translateY(12px) scale(0.97) translateX(8px); }
+}
+
+@keyframes particleFloat {
+  0%   { transform: translateY(0) scale(1);   opacity: 0; }
+  15%  { opacity: 0.75; }
+  85%  { opacity: 0.4; }
+  100% { transform: translateY(-90px) scale(0.4); opacity: 0; }
+}
+
+@keyframes tickerScroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+.hero-fade-1 { animation: heroFade 0.55s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.hero-fade-2 { animation: heroFade 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both; }
+.hero-fade-3 { animation: heroFade 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both; }
+.hero-fade-4 { animation: heroFade 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.3s both; }
+
+.hero-orb-blue    { animation: orbFloat    8s ease-in-out infinite; }
+.hero-orb-cyan-lg { animation: orbFloatAlt 10s ease-in-out infinite 2s; }
+.hero-orb-cyan    { animation: orbFloat    12s ease-in-out infinite 4s; }
+
+.hero-particle {
+  background: radial-gradient(
+    circle,
+    rgba(163, 255, 18, 0.8) 0%,
+    rgba(45, 255, 122, 0.35) 60%,
+    transparent 100%
+  );
+  animation: particleFloat linear infinite;
+  will-change: transform, opacity;
+}
+
+.ticker-scroll {
+  animation: tickerScroll 32s linear infinite;
+  will-change: transform;
+}
+.ticker-scroll:hover {
+  animation-play-state: paused;
+}
+
+.hero-ticker-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.hero-ticker-btn:hover:not(:disabled) {
+  background: rgba(163, 255, 18, 0.06);
+  border-color: rgba(163, 255, 18, 0.3);
+  color: #A3FF12;
+}
+
+/* ── Markdown report styles ─────────────────── */
+.report-body h1 {
+  @apply text-xl font-semibold text-slate-100 mt-6 mb-3 pb-2 border-b border-border;
+}
+.report-body h2 {
+  @apply text-base font-semibold text-slate-200 mt-5 mb-2;
+}
+.report-body h3 {
+  @apply text-sm font-semibold mt-4 mb-1;
+  color: #A3FF12;
+}
+.report-body p {
+  @apply text-sm text-slate-300 leading-relaxed mb-3;
+}
+.report-body ul, .report-body ol {
+  @apply text-sm text-slate-300 leading-relaxed mb-3 pl-5;
+}
+.report-body li {
+  @apply mb-1;
+}
+.report-body strong {
+  @apply text-slate-100 font-semibold;
+}
+.report-body em {
+  @apply text-slate-400 italic;
+}
+.report-body code {
+  @apply font-mono text-xs bg-bg-elevated px-1.5 py-0.5 rounded;
+  color: #A3FF12;
+}
+.report-body blockquote {
+  @apply pl-4 my-3 text-slate-400 italic;
+  border-left: 2px solid rgba(163,255,18,0.4);
+}
+.report-body table {
+  @apply w-full text-sm border-collapse mb-4;
+}
+.report-body th {
+  @apply text-xs text-slate-500 font-medium uppercase tracking-wider text-left py-2 px-3 border-b border-border;
+}
+.report-body td {
+  @apply text-slate-300 py-2 px-3 border-b border-border/50;
+}
+.report-body hr {
+  @apply border-border my-5;
+}

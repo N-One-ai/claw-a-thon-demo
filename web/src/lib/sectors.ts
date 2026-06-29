@@ -1,0 +1,48 @@
+const SECTOR_VI: Record<string, string> = {
+  technology: "Công nghệ",
+  banking: "Ngân hàng",
+  financials: "Tài chính",
+  real_estate: "Bất động sản",
+  consumer_discretionary: "Tiêu dùng không thiết yếu",
+  consumer_staples: "Tiêu dùng thiết yếu",
+  industrials: "Công nghiệp",
+  materials: "Nguyên vật liệu",
+  energy: "Năng lượng",
+  utilities: "Tiện ích",
+  healthcare: "Y tế",
+  telecommunications: "Viễn thông",
+  communication_services: "Dịch vụ truyền thông",
+  information_technology: "Công nghệ thông tin",
+  transportation: "Vận tải",
+  logistics: "Logistics",
+  retail: "Bán lẻ",
+  food_beverage: "Thực phẩm & Đồ uống",
+  construction: "Xây dựng",
+  insurance: "Bảo hiểm",
+  securities: "Chứng khoán",
+  chemical: "Hóa chất",
+  oil_gas: "Dầu khí",
+  media: "Truyền thông",
+  education: "Giáo dục",
+  agriculture: "Nông nghiệp",
+  textile: "Dệt may",
+  steel: "Thép",
+  pharmaceutical: "Dược phẩm",
+  aviation: "Hàng không",
+  tourism: "Du lịch",
+  hospitality: "Khách sạn",
+  automotive: "Ô tô",
+  electronics: "Điện tử",
+  software: "Phần mềm",
+  internet: "Internet",
+  mining: "Khai khoáng",
+  marine: "Hàng hải",
+  unknown: "Chưa phân loại",
+  other: "Khác",
+};
+
+export function translateSector(sector: string): string {
+  if (!sector) return "Khác";
+  const key = sector.toLowerCase().replace(/[\s-]+/g, "_");
+  return SECTOR_VI[key] ?? sector;
+}

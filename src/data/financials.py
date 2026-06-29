@@ -10,14 +10,13 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from .cache import CacheManager
 from ._utils import (
     find_col,
     period_label,
     safe_float,
-    safe_str,
     with_retry,
 )
+from .cache import CacheManager
 from .models import (
     BalanceSheet,
     CashFlowStatement,
@@ -154,7 +153,6 @@ class FinancialDataFetcher:
                 int_exp = find_col(df, "Chi phí lãi vay", "Interest Expense",
                                    "InterestExpense", "interest_expense", "interestExpense")
 
-                idx = df.index[list(df.itertuples(index=False)).index(row)] if False else None
                 # Dùng positional index qua enumerate thay vì .loc
                 i = len(results)
 

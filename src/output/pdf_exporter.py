@@ -5,7 +5,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-
 # Font search order — fonts that support Vietnamese Unicode
 _UNICODE_FONT_PATHS: list[str] = [
     # macOS
@@ -76,10 +75,15 @@ class PDFExporter:
         try:
             from reportlab.lib import colors
             from reportlab.lib.pagesizes import A4
-            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
             from reportlab.lib.units import cm
             from reportlab.platypus import (
-                SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable,
+                HRFlowable,
+                Paragraph,
+                SimpleDocTemplate,
+                Spacer,
+                Table,
+                TableStyle,
             )
         except ImportError as exc:
             raise RuntimeError(
@@ -194,7 +198,7 @@ class PDFExporter:
         """Chuyển markdown thành reportlab flowables."""
         from reportlab.lib import colors
         from reportlab.lib.units import cm
-        from reportlab.platypus import Paragraph, Spacer, HRFlowable
+        from reportlab.platypus import HRFlowable, Paragraph, Spacer
 
         elements = []
         for line in text.split("\n"):

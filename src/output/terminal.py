@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
+from rich import box
 from rich.columns import Columns
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from rich import box
 
 console = Console()
 
@@ -94,11 +94,11 @@ class TerminalRenderer:
         if name:
             header.append(f"  —  {name}", style="white")
         header.append("\n\n")
-        header.append(f"  💰 Giá hiện tại: ", style="dim")
+        header.append("  💰 Giá hiện tại: ", style="dim")
         header.append(f"{price:>12,.0f} VND".replace(",", "."), style="bold white")
 
         if consensus:
-            header.append(f"     Fair Value: ", style="dim")
+            header.append("     Fair Value: ", style="dim")
             header.append(f"{consensus:>12,.0f} VND".replace(",", "."), style="bold cyan")
 
         if discount is not None:
@@ -106,9 +106,9 @@ class TerminalRenderer:
             header.append(f"     {sign}{discount:.1f}%  ", style=label_color)
             header.append(f"[{label}]", style=label_color)
 
-        header.append(f"\n\n  📈 Xu hướng: ")
+        header.append("\n\n  📈 Xu hướng: ")
         header.append(f"{trend}", style=trend_color)
-        header.append(f"     ⚠️  Rủi ro: ")
+        header.append("     ⚠️  Rủi ro: ")
         header.append(f"{risk_level}", style=risk_color)
         header.append(f"     🗓️  {datetime.now().strftime('%d/%m/%Y')}")
 
@@ -209,7 +209,6 @@ class TerminalRenderer:
         t.add_column("Giá trị", justify="right", min_width=10)
         t.add_column("Tín hiệu", min_width=12)
 
-        price = tc.get("current_price_vnd", 0)
         ma = tc.get("moving_averages", {})
 
         def ma_row(label, key_sma, key_pct):

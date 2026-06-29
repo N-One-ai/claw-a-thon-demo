@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
 from datetime import datetime
@@ -11,8 +10,8 @@ import anthropic
 
 from ..config_loader import get_settings
 from ..data.models import AnalysisRequest
-from .tool_registry import ToolRegistry
 from ..tools.services import ToolServices
+from .tool_registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 

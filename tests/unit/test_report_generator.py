@@ -9,13 +9,12 @@ from __future__ import annotations
 import sys
 from datetime import date, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.data.models import (
+    OHLCV,
     BalanceSheet,
     CashFlowStatement,
     CompanyInfo,
@@ -26,7 +25,6 @@ from src.data.models import (
     FinancialStatements,
     IncomeStatement,
     ModelResult,
-    OHLCV,
     PriceHistory,
     RiskFlag,
     RiskFlagType,
@@ -37,9 +35,8 @@ from src.data.models import (
     ValuationLabel,
     ValuationResults,
 )
-from src.pipeline import AnalysisPipeline, StockAnalysisResult
-from src.report_generator import PromptBuilder, ReportConfig, ReportGenerator, _SYSTEM_PROMPT
-
+from src.pipeline import StockAnalysisResult
+from src.report_generator import _SYSTEM_PROMPT, PromptBuilder, ReportConfig, ReportGenerator
 
 # ================================================================== #
 # Shared Fixtures                                                       #
@@ -643,13 +640,14 @@ class TestReportGeneratorGenerate:
         gen = ReportGenerator.__new__(ReportGenerator)
         gen._config = ReportConfig()
         gen._client = MagicMock()
+        gen._cache = None
         return gen
 
     def test_generate_calls_api(self):
         gen = self._mock_generator()
         gen._client.messages.create.return_value = _make_mock_response("# Test Report\n\nNội dung")
         result = _full_result()
-        output = gen.generate(result)
+        gen.generate(result)
         assert gen._client.messages.create.called
 
     def test_generate_returns_string(self):
@@ -717,6 +715,7 @@ class TestReportGeneratorStream:
     def _mock_stream_generator(self, chunks: list[str]) -> ReportGenerator:
         gen = ReportGenerator.__new__(ReportGenerator)
         gen._config = ReportConfig()
+        gen._cache = None
 
         mock_stream = MagicMock()
         mock_stream.text_stream = iter(chunks)
@@ -783,7 +782,7 @@ class TestReportGeneratorInit:
     def test_init_reads_api_key_from_env(self):
         with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "env-key"}):
             with patch("src.report_generator.anthropic.Anthropic") as MockClient:
-                gen = ReportGenerator()
+                ReportGenerator()
                 MockClient.assert_called_once_with(api_key="env-key")
 
 
@@ -798,8 +797,10 @@ class TestExtractText:
         assert ReportGenerator._extract_text([block]) == "Hello"
 
     def test_multiple_text_blocks_joined(self):
-        b1 = MagicMock(); b1.text = "Part 1"
-        b2 = MagicMock(); b2.text = "Part 2"
+        b1 = MagicMock()
+        b1.text = "Part 1"
+        b2 = MagicMock()
+        b2.text = "Part 2"
         result = ReportGenerator._extract_text([b1, b2])
         assert "Part 1" in result and "Part 2" in result
 
@@ -822,3 +823,80 @@ class TestExtractText:
         block.text = "   text   "
         result = ReportGenerator._extract_text([block])
         assert result == "text"
+
+
+# ================================================================== #
+# Report Caching                                                       #
+# ================================================================== #
+
+class TestReportCaching:
+    """ReportGenerator với CacheManager: cache hit / miss / store."""
+
+    def _mock_cache(self, cached_value=None):
+        cache = MagicMock()
+        cache.get.return_value = cached_value
+        return cache
+
+    def _gen_with_cache(self, cache):
+        gen = ReportGenerator.__new__(ReportGenerator)
+        gen._config = ReportConfig()
+        gen._client = MagicMock()
+        gen._cache = cache
+        return gen
+
+    def test_cache_hit_skips_api(self):
+        """Cache hit — không gọi Claude API."""
+        cache = self._mock_cache(cached_value={"text": "# Báo cáo đã cache"})
+        gen = self._gen_with_cache(cache)
+        result = gen.generate(_full_result())
+        gen._client.messages.create.assert_not_called()
+        assert result == "# Báo cáo đã cache"
+
+    def test_cache_miss_calls_api(self):
+        """Cache miss — gọi Claude API bình thường."""
+        cache = self._mock_cache(cached_value=None)
+        gen = self._gen_with_cache(cache)
+        gen._client.messages.create.return_value = _make_mock_response("# Mới từ API")
+        result = gen.generate(_full_result())
+        gen._client.messages.create.assert_called_once()
+        assert result == "# Mới từ API"
+
+    def test_cache_stores_after_api_call(self):
+        """Sau API call, kết quả được lưu vào cache."""
+        cache = self._mock_cache(cached_value=None)
+        gen = self._gen_with_cache(cache)
+        gen._client.messages.create.return_value = _make_mock_response("# Report text")
+        gen.generate(_full_result())
+        cache.set.assert_called_once()
+        call_args = cache.set.call_args
+        assert call_args[0][0] == "reports"
+        stored = call_args[0][2]
+        assert stored["text"] == "# Report text"
+
+    def test_cache_key_contains_ticker(self):
+        """Cache key phải chứa ticker."""
+        cache = self._mock_cache(cached_value=None)
+        gen = self._gen_with_cache(cache)
+        gen._client.messages.create.return_value = _make_mock_response("# FPT")
+        gen.generate(_full_result("FPT"))
+        key_used = cache.get.call_args[0][1]
+        assert "FPT" in key_used
+
+    def test_no_cache_always_calls_api(self):
+        """Không có cache → mỗi lần gọi đều gọi API."""
+        gen = ReportGenerator.__new__(ReportGenerator)
+        gen._config = ReportConfig()
+        gen._client = MagicMock()
+        gen._cache = None
+        gen._client.messages.create.return_value = _make_mock_response("# Fresh")
+        gen.generate(_full_result())
+        gen.generate(_full_result())
+        assert gen._client.messages.create.call_count == 2
+
+    def test_invalid_cache_entry_calls_api(self):
+        """Cache trả về dict không có 'text' → gọi API lại."""
+        cache = self._mock_cache(cached_value={"wrong_key": "data"})
+        gen = self._gen_with_cache(cache)
+        gen._client.messages.create.return_value = _make_mock_response("# Fresh")
+        gen.generate(_full_result())
+        gen._client.messages.create.assert_called_once()

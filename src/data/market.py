@@ -7,8 +7,8 @@ import logging
 from datetime import date
 from typing import Optional
 
-from .cache import CacheManager
 from ._utils import find_col, safe_float, safe_int, to_date, with_retry, years_ago
+from .cache import CacheManager
 from .models import OHLCV, PriceHistory
 
 logger = logging.getLogger(__name__)

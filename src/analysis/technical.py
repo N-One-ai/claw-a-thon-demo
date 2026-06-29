@@ -3,9 +3,11 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from ..data.models import PriceHistory, TechnicalSignal
+from ..data.models import OHLCVPoint, PriceHistory, TechnicalSignal
 
 logger = logging.getLogger(__name__)
+
+_CHART_WINDOW = 200  # số phiên trả về cho frontend chart
 
 
 class TechnicalAnalyzer:
@@ -44,6 +46,37 @@ class TechnicalAnalyzer:
         # Price trend
         price_trend = self._price_trend(price, sma20, sma50, sma200)
 
+        # ── Time-series for frontend chart ───────────────────────────────
+        candles_oi = list(reversed(history.candles))   # oldest → newest
+        prices_oi = [c.close for c in candles_oi]
+        n = len(candles_oi)
+
+        sma20_s  = self._sma_series(prices_oi, 20)
+        sma50_s  = self._sma_series(prices_oi, 50)
+        sma200_s = self._sma_series(prices_oi, 200)
+        rsi_s    = self._rsi_series(prices_oi, 14)
+        macd_s, msig_s, mhist_s = self._macd_series(prices_oi)
+
+        start = max(0, n - _CHART_WINDOW)
+        chart_data: list[OHLCVPoint] = []
+        for i in range(start, n):
+            c = candles_oi[i]
+            chart_data.append(OHLCVPoint(
+                date=c.date.isoformat(),
+                open=c.open,
+                high=c.high,
+                low=c.low,
+                close=c.close,
+                volume=c.volume,
+                sma20=sma20_s[i],
+                sma50=sma50_s[i],
+                sma200=sma200_s[i],
+                rsi=rsi_s[i],
+                macd=macd_s[i],
+                macd_signal=msig_s[i],
+                macd_histogram=mhist_s[i],
+            ))
+
         return TechnicalSignal(
             current_price=price,
             sma_20=sma20,
@@ -60,6 +93,7 @@ class TechnicalAnalyzer:
             high_52w=history.high_52w,
             low_52w=history.low_52w,
             position_52w_pct=history.position_52w,
+            chart_data=chart_data,
         )
 
     # ------------------------------------------------------------------ #
@@ -158,6 +192,77 @@ class TechnicalAnalyzer:
             ema = v * k + ema * (1 - k)
             result.append(ema)
         return result
+
+    # ------------------------------------------------------------------ #
+    # Time-series helpers (oldest-first input, oldest-first output)       #
+    # ------------------------------------------------------------------ #
+
+    def _sma_series(self, prices: list[float], period: int) -> list[Optional[float]]:
+        """SMA series với sliding window O(n). prices = oldest first."""
+        n = len(prices)
+        result: list[Optional[float]] = [None] * n
+        if n < period:
+            return result
+        win = sum(prices[:period])
+        result[period - 1] = round(win / period, 2)
+        for i in range(period, n):
+            win += prices[i] - prices[i - period]
+            result[i] = round(win / period, 2)
+        return result
+
+    def _rsi_series(self, prices: list[float], period: int = 14) -> list[Optional[float]]:
+        """RSI Wilder series. prices = oldest first."""
+        n = len(prices)
+        result: list[Optional[float]] = [None] * n
+        if n < period + 1:
+            return result
+
+        changes = [prices[i] - prices[i - 1] for i in range(1, n)]
+        gains  = [max(c, 0.0)        for c in changes]
+        losses = [abs(min(c, 0.0))   for c in changes]
+
+        avg_g = sum(gains[:period])  / period
+        avg_l = sum(losses[:period]) / period
+
+        def _r(ag: float, al: float) -> float:
+            return 100.0 if al == 0 else round(100 - 100 / (1 + ag / al), 2)
+
+        result[period] = _r(avg_g, avg_l)
+        for i in range(period, n - 1):
+            avg_g = (avg_g * (period - 1) + gains[i])  / period
+            avg_l = (avg_l * (period - 1) + losses[i]) / period
+            result[i + 1] = _r(avg_g, avg_l)
+        return result
+
+    def _macd_series(
+        self, prices: list[float], fast: int = 12, slow: int = 26, signal: int = 9
+    ) -> tuple[list[Optional[float]], list[Optional[float]], list[Optional[float]]]:
+        """MACD/Signal/Histogram series. prices = oldest first. Each list same length as prices."""
+        n = len(prices)
+        macd_out:  list[Optional[float]] = [None] * n
+        sig_out:   list[Optional[float]] = [None] * n
+        hist_out:  list[Optional[float]] = [None] * n
+
+        ema_f = self._ema_series(prices, fast)
+        ema_s = self._ema_series(prices, slow)
+        if not ema_s:
+            return macd_out, sig_out, hist_out
+
+        offset = slow - fast
+        macd_vals = [ema_f[i + offset] - ema_s[i] for i in range(len(ema_s))]
+        for i, m in enumerate(macd_vals):
+            macd_out[slow - 1 + i] = round(m, 4)
+
+        sig_vals = self._ema_series(macd_vals, signal)
+        if not sig_vals:
+            return macd_out, sig_out, hist_out
+
+        sig_start = slow - 1 + signal - 1
+        for i, s in enumerate(sig_vals):
+            m = macd_vals[signal - 1 + i]
+            sig_out[sig_start + i]  = round(s, 4)
+            hist_out[sig_start + i] = round(m - s, 4)
+        return macd_out, sig_out, hist_out
 
     @staticmethod
     def _macd_label(

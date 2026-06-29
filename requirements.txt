@@ -1,5 +1,6 @@
 # Core
 anthropic>=0.40.0
+python-dotenv>=1.0.0
 pydantic>=2.6.0
 pydantic-settings>=2.2.0
 
@@ -19,6 +20,11 @@ reportlab>=4.1.0      # PDF export
 
 # HTTP (standard library urllib dùng cho RSS, requests cho các call nâng cao)
 requests>=2.31.0
+certifi>=2024.2.2        # SSL certificate bundle cho urllib trên macOS
+
+# API server
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
 
 # Date/time
 python-dateutil>=2.9.0

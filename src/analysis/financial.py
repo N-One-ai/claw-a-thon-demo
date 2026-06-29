@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 import logging
-import statistics
 from typing import Optional
 
 from ..data.models import (
-    BalanceSheet,
-    CashFlowStatement,
     FinancialRatios,
     FinancialStatements,
     IncomeStatement,
@@ -34,7 +31,6 @@ class FinancialAnalyzer:
         """Tính FinancialRatios từ kỳ mới nhất + giá hiện tại."""
         income = statements.latest_income
         balance = statements.latest_balance
-        cashflow = statements.latest_cashflow
 
         if income is None or balance is None:
             return None
@@ -149,7 +145,6 @@ class FinancialAnalyzer:
         """
         flags: list[str] = []
         income = statements.latest_income
-        balance = statements.latest_balance
         cashflow = statements.latest_cashflow
 
         # Lợi nhuận cao nhưng FCF thấp → có thể ghi nhận doanh thu ảo

@@ -11,7 +11,6 @@ from ..data.models import (
     EarningsYieldResult,
     FinancialStatements,
     ModelResult,
-    Sector,
     ValuationLabel,
     ValuationResults,
 )

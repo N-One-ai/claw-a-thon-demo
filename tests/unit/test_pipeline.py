@@ -5,9 +5,8 @@ Không gọi vnstock — dùng mock data hoàn toàn.
 from __future__ import annotations
 
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
-from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -15,18 +14,16 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.data.models import (
+    OHLCV,
     BalanceSheet,
     CashFlowStatement,
     CompanyInfo,
     Exchange,
-    FinancialRatios,
     FinancialStatements,
     IncomeStatement,
-    OHLCV,
     PriceHistory,
     RiskLevel,
     Sector,
-    ValuationLabel,
 )
 from src.data.schemas import StockData
 from src.pipeline import (
@@ -35,7 +32,6 @@ from src.pipeline import (
     StockAnalysisResult,
     analyze_stock,
 )
-
 
 # ================================================================== #
 # Fixtures                                                             #
@@ -354,7 +350,7 @@ class TestAnalysisPipelineUnit:
 
     def test_index_fetch_fail_does_not_stop_pipeline(self):
         pipeline = self._make_pipeline()
-        stock_data = self._patch_fetcher(pipeline)
+        self._patch_fetcher(pipeline)
         pipeline._fetcher.get_index_history.side_effect = ConnectionError("no index")
         result = pipeline.analyze("FPT")
         # Pipeline vẫn hoàn thành, chỉ lỗi index_data

@@ -35,3 +35,6 @@ reports/
 .idea/
 .vscode/
 *.swp
+web/node_modules
+web/.next
+.cache

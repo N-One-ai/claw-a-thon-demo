@@ -48,7 +48,6 @@ class RiskAnalyzer:
         volatility = self.compute_annualized_volatility(price_history)
 
         balance = statements.latest_balance
-        income = statements.latest_income
 
         de = ratios.debt_to_equity if ratios else (
             balance.total_debt / balance.total_equity

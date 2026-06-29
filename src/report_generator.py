@@ -10,21 +10,17 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Iterator, Optional
 
 import anthropic
 
-from .pipeline import StockAnalysisResult
+from .data.cache import CacheManager
 from .data.models import (
-    FinancialRatios,
     ModelResult,
-    RiskFlag,
-    RiskProfile,
-    TechnicalSignal,
-    ValuationResults,
 )
+from .pipeline import StockAnalysisResult
 
 logger = logging.getLogger(__name__)
 
@@ -391,7 +387,6 @@ class PromptBuilder:
     def _data_quality_section(result: StockAnalysisResult) -> str:
         dq = result.data_quality
         errors = result.errors
-        p = PromptBuilder._n
 
         lines = [
             "### PHẦN F — CHẤT LƯỢNG DỮ LIỆU",
@@ -436,14 +431,17 @@ class ReportGenerator:
         self,
         api_key: Optional[str] = None,
         config: Optional[ReportConfig] = None,
+        cache: Optional[CacheManager] = None,
     ) -> None:
         self._config = config or ReportConfig()
         self._client = anthropic.Anthropic(
             api_key=api_key or os.environ.get("ANTHROPIC_API_KEY")
         )
+        self._cache = cache
         logger.info(
-            "ReportGenerator ready — model=%s, max_tokens=%d",
+            "ReportGenerator ready — model=%s, max_tokens=%d, cache=%s",
             self._config.model, self._config.max_tokens,
+            "enabled" if cache else "disabled",
         )
 
     # ------------------------------------------------------------------ #
@@ -454,6 +452,9 @@ class ReportGenerator:
         """
         Sinh báo cáo Markdown đầy đủ (blocking).
 
+        Nếu CacheManager được cung cấp, kiểm tra cache theo ticker + ngày trước.
+        Cache TTL = 24h (mỗi ngày chỉ gọi Claude API 1 lần cho cùng 1 ticker).
+
         Args:
             result: StockAnalysisResult từ pipeline.analyze().
 
@@ -463,6 +464,14 @@ class ReportGenerator:
         Raises:
             anthropic.APIError: Nếu Claude API trả về lỗi.
         """
+        cache_key = f"{result.ticker}_{datetime.now().strftime('%Y%m%d')}"
+
+        if self._cache:
+            cached = self._cache.get("reports", cache_key)
+            if cached and isinstance(cached, dict) and "text" in cached:
+                logger.info("[ReportGenerator] Cache hit — %s", result.ticker)
+                return cached["text"]
+
         user_prompt = PromptBuilder.build(result, self._config.extra_instructions)
         logger.info("[ReportGenerator] Generating report for %s...", result.ticker)
 
@@ -478,6 +487,10 @@ class ReportGenerator:
             "[ReportGenerator] Done — %d chars, stop_reason=%s",
             len(text), response.stop_reason,
         )
+
+        if self._cache:
+            self._cache.set("reports", cache_key, {"text": text})
+
         return text
 
     def generate_stream(self, result: StockAnalysisResult) -> Iterator[str]:

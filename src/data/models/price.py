@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 
 class OHLCV(BaseModel):
@@ -14,6 +14,23 @@ class OHLCV(BaseModel):
     low: float
     close: float
     volume: int
+
+
+class OHLCVPoint(BaseModel):
+    """OHLCV + chỉ báo kỹ thuật cho một phiên — dùng cho biểu đồ frontend."""
+    date: str            # ISO "YYYY-MM-DD"
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
+    sma20: Optional[float] = None
+    sma50: Optional[float] = None
+    sma200: Optional[float] = None
+    rsi: Optional[float] = None
+    macd: Optional[float] = None
+    macd_signal: Optional[float] = None
+    macd_histogram: Optional[float] = None
 
 
 class PriceHistory(BaseModel):

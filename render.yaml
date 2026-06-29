@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: stockmind-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: RISK_FREE_RATE
+        value: "0.048"
+    healthCheckPath: /health
+    autoDeploy: true

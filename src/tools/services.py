@@ -10,7 +10,6 @@ from ..analysis import (
     ValuationEngine,
 )
 from ..data.cache import CacheManager
-from ..data.models import AnalysisRequest
 from ..data.news_client import NewsClient
 from ..data.vnstock_client import VnstockClient
 

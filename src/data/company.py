@@ -6,8 +6,8 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from .cache import CacheManager
 from ._utils import find_col, safe_float, safe_int, safe_str, with_retry
+from .cache import CacheManager
 from .models import CompanyInfo, Exchange, Sector
 
 logger = logging.getLogger(__name__)

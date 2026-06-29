@@ -14,7 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.main import _build_parser, _check_api_key, _setup_logging
+from src.main import _build_parser, _check_api_key, _load_watchlist
 
 # run_pipeline() imports lazily — patch at source module, not src.main
 _PIPELINE_CLS = "src.pipeline.AnalysisPipeline"
@@ -30,9 +30,34 @@ class TestParser:
     def _parse(self, args: list[str]) -> Namespace:
         return _build_parser().parse_args(args)
 
-    def test_ticker_required(self):
+    def test_no_target_does_not_crash_parser(self):
+        # Parser không raise — main() sẽ print help + exit khi không có target
+        args = _build_parser().parse_args([])
+        assert args.ticker is None
+        assert args.tickers is None
+        assert args.serve is False
+
+    def test_tickers_argument(self):
+        args = self._parse(["--tickers", "VCB,FPT,HPG"])
+        assert args.tickers == "VCB,FPT,HPG"
+        assert args.ticker is None
+
+    def test_serve_argument(self):
+        args = self._parse(["--serve"])
+        assert args.serve is True
+        assert args.ticker is None
+
+    def test_ticker_and_tickers_mutually_exclusive(self):
         with pytest.raises(SystemExit):
-            _build_parser().parse_args([])
+            self._parse(["--ticker", "FPT", "--tickers", "VCB,FPT"])
+
+    def test_port_default(self):
+        args = self._parse(["--serve"])
+        assert args.port == 8080
+
+    def test_port_custom(self):
+        args = self._parse(["--serve", "--port", "9000"])
+        assert args.port == 9000
 
     def test_ticker_stored_as_given(self):
         args = self._parse(["--ticker", "fpt"])
@@ -207,8 +232,12 @@ class TestMainRouting:
 def _make_mock_result(ticker="FPT"):
     """StockAnalysisResult mock với đủ fields để run_pipeline() không crash."""
     from src.data.models import (
-        CompanyInfo, Exchange, FinancialStatements,
-        OHLCV, PriceHistory, Sector,
+        OHLCV,
+        CompanyInfo,
+        Exchange,
+        FinancialStatements,
+        PriceHistory,
+        Sector,
     )
     from src.pipeline import DataQuality, StockAnalysisResult
 
@@ -473,3 +502,105 @@ class TestRunPipelineStream:
             run_pipeline(args)
 
         mock_gen_inst.generate.assert_not_called()
+
+
+# ================================================================== #
+# Watchlist / Alert — parser + _load_watchlist()                       #
+# ================================================================== #
+
+class TestWatchlistParser:
+    def _parse(self, args: list[str]) -> Namespace:
+        return _build_parser().parse_args(args)
+
+    def test_watchlist_argument_stored(self):
+        args = self._parse(["--watchlist", "VCB,FPT,HPG"])
+        assert args.watchlist == "VCB,FPT,HPG"
+
+    def test_watchlist_and_ticker_mutually_exclusive(self):
+        with pytest.raises(SystemExit):
+            self._parse(["--ticker", "FPT", "--watchlist", "VCB,FPT"])
+
+    def test_watchlist_and_tickers_mutually_exclusive(self):
+        with pytest.raises(SystemExit):
+            self._parse(["--tickers", "FPT,VCB", "--watchlist", "HPG"])
+
+    def test_alert_threshold_default(self):
+        args = self._parse(["--watchlist", "VCB"])
+        assert args.alert_threshold == pytest.approx(10.0)
+
+    def test_alert_threshold_custom(self):
+        args = self._parse(["--watchlist", "VCB", "--alert-threshold", "15"])
+        assert args.alert_threshold == pytest.approx(15.0)
+
+    def test_max_risk_default(self):
+        args = self._parse(["--watchlist", "VCB"])
+        assert args.max_risk == "MEDIUM"
+
+    def test_max_risk_low(self):
+        args = self._parse(["--watchlist", "VCB", "--max-risk", "LOW"])
+        assert args.max_risk == "LOW"
+
+    def test_max_risk_very_high(self):
+        args = self._parse(["--watchlist", "VCB", "--max-risk", "VERY_HIGH"])
+        assert args.max_risk == "VERY_HIGH"
+
+    def test_max_risk_invalid_rejected(self):
+        with pytest.raises(SystemExit):
+            self._parse(["--watchlist", "VCB", "--max-risk", "EXTREME"])
+
+
+class TestLoadWatchlist:
+    def test_comma_separated(self):
+        tickers = _load_watchlist("VCB,FPT,HPG")
+        assert tickers == ["VCB", "FPT", "HPG"]
+
+    def test_uppercases(self):
+        tickers = _load_watchlist("vcb,fpt")
+        assert tickers == ["VCB", "FPT"]
+
+    def test_skips_blank(self):
+        tickers = _load_watchlist("VCB,,FPT, ,HPG")
+        assert tickers == ["VCB", "FPT", "HPG"]
+
+    def test_single_ticker(self):
+        tickers = _load_watchlist("VCB")
+        assert tickers == ["VCB"]
+
+    def test_from_file(self, tmp_path):
+        f = tmp_path / "tickers.txt"
+        f.write_text("VCB\nFPT\nHPG\n", encoding="utf-8")
+        tickers = _load_watchlist(str(f))
+        assert tickers == ["VCB", "FPT", "HPG"]
+
+    def test_file_with_commas(self, tmp_path):
+        f = tmp_path / "tickers.txt"
+        f.write_text("VCB,FPT\nHPG\n", encoding="utf-8")
+        tickers = _load_watchlist(str(f))
+        assert tickers == ["VCB", "FPT", "HPG"]
+
+    def test_file_skips_blank_lines(self, tmp_path):
+        f = tmp_path / "tickers.txt"
+        f.write_text("VCB\n\nFPT\n  \nHPG\n", encoding="utf-8")
+        tickers = _load_watchlist(str(f))
+        assert tickers == ["VCB", "FPT", "HPG"]
+
+
+class TestMainWatchlistRouting:
+    def test_watchlist_calls_run_watchlist(self):
+        with patch("src.main.run_watchlist") as mock_wl, \
+             patch("src.main._check_api_key"), \
+             patch("src.main._setup_logging"), \
+             patch("sys.argv", ["prog", "--watchlist", "VCB,FPT"]):
+            from src.main import main
+            main()
+            mock_wl.assert_called_once()
+
+    def test_watchlist_does_not_call_run_batch(self):
+        with patch("src.main.run_watchlist"), \
+             patch("src.main.run_batch") as mock_batch, \
+             patch("src.main._check_api_key"), \
+             patch("src.main._setup_logging"), \
+             patch("sys.argv", ["prog", "--watchlist", "VCB,FPT"]):
+            from src.main import main
+            main()
+            mock_batch.assert_not_called()

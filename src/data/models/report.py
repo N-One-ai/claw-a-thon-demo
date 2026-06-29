@@ -5,10 +5,10 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from .company import CompanyInfo, FinancialStatements, FinancialRatios
+from .company import CompanyInfo, FinancialRatios, FinancialStatements
 from .price import PriceHistory
-from .valuation import ValuationResults
 from .risk import RiskProfile, TechnicalSignal
+from .valuation import ValuationResults
 
 
 class NewsItem(BaseModel):
