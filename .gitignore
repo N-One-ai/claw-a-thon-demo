@@ -38,3 +38,4 @@ reports/
 web/node_modules
 web/.next
 .cache
+web/.env.local
