@@ -128,12 +128,25 @@ def create_app(
     # Routes                                                               #
     # ------------------------------------------------------------------ #
 
+    @app.get("/", tags=["System"])
+    async def root() -> dict:
+        """Trang chủ API."""
+        return {
+            "service": "StockMind AI — Stock Analysis API",
+            "version": "1.0.0",
+            "status": "online",
+            "docs": "/docs",
+            "health": "/health",
+            "analyze": "/analyze/{ticker}",
+            "timestamp": datetime.now().isoformat(),
+        }
+
     @app.get("/health", tags=["System"])
     async def health() -> dict:
         """Kiểm tra trạng thái server."""
         return {
             "status": "ok",
-            "service": "N-One Stock Analysis Agent",
+            "service": "StockMind AI",
             "version": "1.0.0",
             "timestamp": datetime.now().isoformat(),
         }
