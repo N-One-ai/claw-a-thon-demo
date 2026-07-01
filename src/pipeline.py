@@ -250,8 +250,10 @@ class AnalysisPipeline:
         growth = custom_growth or self._custom_growth
         errors: dict[str, str] = {}
 
-        # ── Step 0: Invalidate price cache for fresh real-time price ── #
+        # ── Step 0: Invalidate stale caches ────────────────────────── #
         self._cache.invalidate("price_current", ticker)
+        # Invalidate company cache so curated name mapping is always applied
+        self._cache.invalidate("company_info", ticker)
 
         # ── Step 1: Fetch data ──────────────────────────────────────── #
         logger.info("[Pipeline] %s — Bước 1: Lấy dữ liệu", ticker)

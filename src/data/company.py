@@ -8,6 +8,7 @@ from typing import Optional
 
 from ._utils import find_col, safe_float, safe_int, safe_str, with_retry
 from .cache import CacheManager
+from .company_names import get_company_name
 from .models import CompanyInfo, Exchange, Sector
 
 logger = logging.getLogger(__name__)
@@ -217,7 +218,9 @@ class CompanyDataFetcher:
                         return s
             return None
 
-        name = _ov("shortName", "companyName", "company_name", "fullName") or ticker
+        api_name = _ov("shortName", "companyName", "company_name", "fullName") or ""
+        # Use curated name map — overrides vnstock when API returns wrong/missing name
+        name = get_company_name(ticker, fallback=api_name) or api_name or ticker
 
         exchange_raw = _ov("exchange", "exchangeName", "listingPlace", "listingplace")
         exchange = _map_exchange(exchange_raw)
