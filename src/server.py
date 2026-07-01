@@ -24,9 +24,9 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import AsyncIterator, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from .data.cache import CacheManager
@@ -116,6 +116,19 @@ def create_app(
         lifespan=lifespan,
     )
 
+    # Global exception handler — always return JSON, never plain text 500
+    @app.exception_handler(Exception)
+    async def global_exception_handler(_request: Request, exc: Exception) -> JSONResponse:
+        logger.error("Unhandled exception: %s", exc, exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Lỗi máy chủ: {type(exc).__name__}: {exc}"},
+        )
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONResponse:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -153,7 +166,6 @@ def create_app(
 
     @app.get(
         "/analyze/{ticker}",
-        response_model=AnalysisResponse,
         tags=["Analysis"],
         summary="Phân tích một mã cổ phiếu (GET)",
     )
@@ -175,7 +187,6 @@ def create_app(
 
     @app.post(
         "/analyze",
-        response_model=AnalysisResponse,
         tags=["Analysis"],
         summary="Phân tích một mã cổ phiếu (POST)",
     )
