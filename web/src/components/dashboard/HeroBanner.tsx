@@ -56,33 +56,30 @@ const TICKER_SYMS = ["VCB", "FPT", "HPG", "VNM", "ACB", "TCB", "MWG", "VIC", "BI
 
 interface TickerData { sym: string; val: string; chg: string; up: boolean }
 
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8080";
-
 async function fetchTickerPrices(): Promise<TickerData[]> {
-  const results = await Promise.allSettled(
-    TICKER_SYMS.map(async (sym) => {
-      const res = await fetch(`${BACKEND}/analyze/${sym}?report=false`, { cache: "no-store" });
-      if (!res.ok) return null;
-      const data = await res.json();
-      const price = data.current_price;
-      const candles = data.technical?.chart_data;
-      let prevClose = price;
-      if (candles && candles.length >= 2) {
-        prevClose = candles[candles.length - 2]?.close ?? price;
-      }
-      const change = prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0;
-      return {
-        sym,
-        val: new Intl.NumberFormat("vi-VN").format(Math.round(price)),
-        chg: `${change >= 0 ? "+" : ""}${change.toFixed(2)}%`,
-        up: change >= 0,
-      };
-    })
-  );
-  return results
-    .filter((r): r is PromiseFulfilledResult<TickerData | null> => r.status === "fulfilled")
-    .map(r => r.value)
-    .filter((d): d is TickerData => d !== null);
+  try {
+    const res = await fetch(
+      `/api/prices?syms=${TICKER_SYMS.join(",")}`,
+      { cache: "no-store" }
+    );
+    if (!res.ok) return [];
+    const items: { sym: string; price: number | null; prevClose: number | null }[] = await res.json();
+    return items
+      .filter(d => d.price != null)
+      .map(d => {
+        const price = d.price!;
+        const prev = d.prevClose ?? price;
+        const change = prev > 0 ? ((price - prev) / prev) * 100 : 0;
+        return {
+          sym: d.sym,
+          val: new Intl.NumberFormat("vi-VN").format(Math.round(price)),
+          chg: `${change >= 0 ? "+" : ""}${change.toFixed(2)}%`,
+          up: change >= 0,
+        };
+      });
+  } catch {
+    return [];
+  }
 }
 
 const FALLBACK_TICKERS: TickerData[] = TICKER_SYMS.map(sym => ({ sym, val: "—", chg: "—", up: true }));
@@ -100,7 +97,12 @@ export function HeroBanner({ onAnalyze, isLoading }: HeroBannerProps) {
   const [tickerItems, setTickerItems] = useState<TickerData[]>(FALLBACK_TICKERS);
 
   useEffect(() => {
-    fetchTickerPrices().then(data => { if (data.length > 0) setTickerItems(data); });
+    const refresh = () => {
+      fetchTickerPrices().then(data => { if (data.length > 0) setTickerItems(data); });
+    };
+    refresh();
+    const interval = setInterval(refresh, 5 * 60 * 1000); // refresh every 5 min
+    return () => clearInterval(interval);
   }, []);
   const { t } = useTranslation();
 

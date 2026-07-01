@@ -22,7 +22,7 @@ interface NewsItem {
   impact_score?: number;
 }
 
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8080";
+const API_BASE = "/api";
 const SOURCE_COLORS: Record<string, string> = { CafeF: "#A3FF12", VnEconomy: "#22D3EE", Vietstock: "#FFB020", TuoiTre: "#A855F7", ThanhNien: "#FF5A76", Other: "#64748B" };
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -41,7 +41,7 @@ export default function NewsPage() {
   const fetchNews = async (tick: string) => {
     setLoading(true); setError(null);
     try {
-      const res = await fetch(`${BACKEND}/analyze/${encodeURIComponent(tick.toUpperCase())}?report=false`, { cache: "no-store" });
+      const res = await fetch(`${API_BASE}/analyze/${encodeURIComponent(tick.toUpperCase())}?report=false`, { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setNews([
         { title: lang === "vi" ? `${tick.toUpperCase()} báo cáo doanh thu Q4 vượt kỳ vọng` : `${tick.toUpperCase()} Q4 revenue beats expectations`, url: "#", source: "CafeF", published: new Date().toISOString(), sentiment: "positive", impact_score: 75, summary: lang === "vi" ? "Doanh thu quý 4 tăng 18% so với cùng kỳ năm trước, vượt kỳ vọng của các chuyên gia phân tích." : "Q4 revenue rose 18% year-over-year, beating analyst expectations." },

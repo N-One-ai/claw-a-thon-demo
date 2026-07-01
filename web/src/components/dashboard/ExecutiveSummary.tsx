@@ -128,14 +128,14 @@ export function ExecutiveSummary({ data }: Props) {
   return (
     <div className="animate-slide-up space-y-4">
       {/* ── Company header ── */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className="font-mono font-extrabold text-2xl text-white tracking-tight">{company.ticker}</span>
-        <span className="text-slate-400 text-sm font-medium">{company.name}</span>
-        <span className="text-[10px] text-slate-600 border border-border rounded-md px-2 py-0.5 uppercase tracking-wider">
+      <div className="flex flex-wrap items-start sm:items-center gap-x-3 gap-y-1.5">
+        <span className="font-mono font-extrabold text-xl sm:text-2xl text-white tracking-tight shrink-0">{company.ticker}</span>
+        <span className="text-slate-400 text-sm font-medium min-w-0 truncate">{company.name}</span>
+        <span className="text-[10px] text-slate-600 border border-border rounded-md px-2 py-0.5 uppercase tracking-wider shrink-0">
           {company.exchange} · {translateSector(company.sector)}
         </span>
         {rec && (
-          <span className={cn("ml-auto px-3 py-1.5 rounded-xl text-xs font-bold tracking-wider border", rec.cls)}>
+          <span className={cn("sm:ml-auto px-3 py-1.5 rounded-xl text-xs font-bold tracking-wider border", rec.cls)}>
             ▶ {rec.text}
           </span>
         )}

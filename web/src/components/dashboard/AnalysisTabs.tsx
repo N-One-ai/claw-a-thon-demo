@@ -28,7 +28,7 @@ function TabButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex items-center justify-center gap-2 h-14 rounded-2xl text-sm font-semibold whitespace-nowrap transition-all duration-200 min-h-0 border flex-1",
+        "flex items-center justify-center gap-2 h-12 sm:h-14 rounded-2xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-200 min-h-0 border flex-1 min-w-[52px] sm:min-w-0 px-2 sm:px-4",
         active
           ? "text-accent border-accent/20 shadow-[0_0_16px_rgba(163,255,18,0.08)]"
           : disabled
@@ -76,8 +76,8 @@ export function AnalysisTabs({ data }: AnalysisTabsProps) {
   return (
     <div className="mt-6 animate-fade-in">
       {/* ── Navigation Container ── */}
-      <div className="card p-2 mb-6 overflow-x-auto scrollbar-none">
-        <div className="flex gap-1 min-w-[480px]">
+      <div className="card p-2 mb-6 overflow-x-auto scrollbar-none scroll-smooth">
+        <div className="flex gap-1 min-w-max sm:min-w-0 sm:w-full">
           {TABS.map(({ id, label, icon, disabled }) => {
             const isDisabled = disabled?.(data) ?? false;
             return (

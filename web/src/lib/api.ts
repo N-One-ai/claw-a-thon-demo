@@ -1,6 +1,7 @@
 import type { AnalysisResponse } from "@/types/analysis";
 
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8080";
+// Use Next.js API proxy to avoid CORS issues with external backend
+const API_BASE = "/api";
 
 export class APIError extends Error {
   constructor(
@@ -21,7 +22,7 @@ export async function analyzeTicker(
   if (options.growth != null) params.set("growth", String(options.growth));
   params.set("report", String(options.report ?? true));
 
-  const url = `${BACKEND}/analyze/${encodeURIComponent(ticker.toUpperCase())}?${params}`;
+  const url = `${API_BASE}/analyze/${encodeURIComponent(ticker.toUpperCase())}?${params}`;
   const res = await fetch(url, { cache: "no-store" });
 
   if (!res.ok) {
@@ -34,7 +35,7 @@ export async function analyzeTicker(
 
 export async function checkHealth(): Promise<boolean> {
   try {
-    const res = await fetch(`${BACKEND}/health`, { cache: "no-store" });
+    const res = await fetch(`${API_BASE}/health`, { cache: "no-store" });
     return res.ok;
   } catch {
     return false;
@@ -50,7 +51,7 @@ export async function* streamReport(
   | { type: "done" }
   | { type: "error"; message: string }
 > {
-  const url = `${BACKEND}/analyze/${encodeURIComponent(ticker.toUpperCase())}/stream`;
+  const url = `${API_BASE}/analyze/${encodeURIComponent(ticker.toUpperCase())}/stream`;
   const res = await fetch(url, { signal, cache: "no-store" });
 
   if (!res.ok || !res.body) {

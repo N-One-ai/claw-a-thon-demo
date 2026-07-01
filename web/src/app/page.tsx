@@ -8,7 +8,7 @@ import { LoadingOverlay, ErrorState } from "@/components/ui/LoadingState";
 import { useAnalysis } from "@/hooks/useAnalysis";
 
 export default function DashboardPage() {
-  const { state, analyze, reset } = useAnalysis();
+  const { state, analyze, reset, retry } = useAnalysis();
 
   const isIdle = state.status === "idle";
 
@@ -32,7 +32,7 @@ export default function DashboardPage() {
       {state.status === "loading" && <LoadingOverlay />}
 
       {state.status === "error" && (
-        <ErrorState message={state.message} onRetry={reset} />
+        <ErrorState message={state.message} ticker={state.ticker} onRetry={retry} onReset={reset} />
       )}
 
       {state.status === "success" && (
