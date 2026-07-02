@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, KeyboardEvent } from "react";
 import { Search, Zap, BarChart2, Shield, Activity, Cpu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/hooks/useTranslation";
+import { MarketOverview } from "@/components/home/MarketOverview";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -246,6 +247,11 @@ export function HeroBanner({ onAnalyze, isLoading }: HeroBannerProps) {
               {t.hero.analyzeBtn}
             </button>
           </div>
+        </div>
+
+        {/* Market Overview */}
+        <div className="hero-fade-3 w-full mb-6">
+          <MarketOverview />
         </div>
 
         {/* Popular tickers */}

@@ -30,6 +30,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from .data.cache import CacheManager
+from .data.market_overview import MarketOverviewFetcher
 from .pipeline import AnalysisPipeline, StockAnalysisResult
 from .report_generator import ReportConfig, ReportGenerator
 
@@ -97,6 +98,7 @@ def create_app(
     pipeline = AnalysisPipeline(cache_dir=cache_dir, source=source)
     report_cache = CacheManager(cache_dir=cache_dir)
     generator = ReportGenerator(config=ReportConfig(), cache=report_cache)
+    market_fetcher = MarketOverviewFetcher(cache=report_cache)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -258,6 +260,24 @@ def create_app(
             results=results,
             errors=errors,
         )
+
+    @app.get(
+        "/market",
+        tags=["Market"],
+        summary="Tổng quan thị trường chứng khoán Việt Nam",
+    )
+    async def market_overview() -> dict:
+        """
+        Trả về tổng quan thị trường: VN-Index, HNX-Index, VN30,
+        độ rộng HOSE/HNX, thanh khoản, giao dịch khối ngoại.
+        Cache 5 phút.
+        """
+        try:
+            data = await asyncio.to_thread(market_fetcher.get_overview)
+            return {"status": "ok", "data": data, "timestamp": datetime.now().isoformat()}
+        except Exception as exc:
+            logger.warning("[Market] Lỗi lấy tổng quan: %s", exc)
+            return {"status": "error", "data": None, "timestamp": datetime.now().isoformat()}
 
     @app.get(
         "/analyze/{ticker}/stream",
