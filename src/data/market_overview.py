@@ -62,7 +62,7 @@ class MarketOverviewFetcher:
 
         result = self._fetch()
         if result:
-            self._cache.set("market", "overview", result, ttl=300)
+            self._cache.set("market", "overview", result, ttl=60)
         return result
 
     # ------------------------------------------------------------------ #
@@ -78,7 +78,7 @@ class MarketOverviewFetcher:
             "hnx_breadth": None,
             "liquidity_ty": None,
             "liquidity_prev_ty": None,
-            "foreign_net_ty": None,
+            "volume_mn_shares": None,
         }
 
         # 1. Index values (VNINDEX, HNXINDEX, VN30)
@@ -86,13 +86,14 @@ class MarketOverviewFetcher:
         result["hnxindex"] = self._fetch_index("HNXINDEX")
         result["vn30"]     = self._fetch_index("VN30")
 
-        # 2. Market breadth + liquidity + foreign flow via price_board
+        # 2. Market breadth + liquidity + volume via price_board
         try:
             hose_board = self._price_board(_HOSE_SAMPLE)
             if hose_board is not None:
                 result["hose_breadth"] = self._breadth(hose_board)
                 liq = self._liquidity(hose_board)
                 result["liquidity_ty"] = liq
+                result["volume_mn_shares"] = self._volume(hose_board)
 
                 # Compare with yesterday's liquidity via index volume proxy
                 prev = result["vnindex"]
@@ -101,8 +102,6 @@ class MarketOverviewFetcher:
                     cv = prev["volume"]
                     if pv > 0:
                         result["liquidity_prev_ty"] = liq * (pv / cv) if cv > 0 else None
-
-                result["foreign_net_ty"] = self._foreign_net(hose_board)
         except Exception as exc:
             logger.warning("[MarketOverview] price_board HOSE lỗi: %s", exc)
 
@@ -183,14 +182,17 @@ class MarketOverviewFetcher:
         total_m = pd.to_numeric(col, errors="coerce").fillna(0).sum()
         return round(float(total_m) / 1000, 1)   # triệu → tỷ
 
-    def _foreign_net(self, df) -> Optional[float]:
-        """Giao dịch ròng khối ngoại (tỷ VND). Dương = mua ròng."""
+    def _volume(self, df) -> Optional[float]:
+        """Tổng khối lượng khớp lệnh (triệu cổ phiếu)."""
         import pandas as pd
-        buy_col  = df.get("match_foreign_buy_value")
-        sell_col = df.get("match_foreign_sell_value")
-        if buy_col is None or sell_col is None:
+        col = df.get("match_accumulated_volume")
+        if col is None:
+            # Try alternative column names
+            for alt in ["match_vol", "match_match_vol", "accumulated_vol"]:
+                col = df.get(alt)
+                if col is not None:
+                    break
+        if col is None:
             return None
-        buy  = pd.to_numeric(buy_col,  errors="coerce").fillna(0).sum()
-        sell = pd.to_numeric(sell_col, errors="coerce").fillna(0).sum()
-        # Values are in VND → convert to tỷ
-        return round(float(buy - sell) / 1e9, 1)
+        total = pd.to_numeric(col, errors="coerce").fillna(0).sum()
+        return round(float(total) / 1_000_000, 1)  # cổ phiếu → triệu cổ phiếu

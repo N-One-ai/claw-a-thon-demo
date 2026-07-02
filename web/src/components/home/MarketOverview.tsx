@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { LineChart, BarChart3, CandlestickChart, Wallet, Globe } from "lucide-react";
+import { TrendingUp, BarChart3, CandlestickChart, Wallet, BarChart2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -26,22 +26,22 @@ interface MarketData {
   hnx_breadth: BreadthData | null;
   liquidity_ty: number | null;
   liquidity_prev_ty: number | null;
-  foreign_net_ty: number | null;
+  volume_mn_shares: number | null;
 }
 
 // ── Animated counter ─────────────────────────────────────────────────────────
 
-function useCountUp(target: number | null, duration = 1000): string {
-  const [current, setCurrent] = useState<number>(0);
+function useCountUp(target: number | null, duration = 900): number | null {
+  const [current, setCurrent] = useState<number | null>(null);
   const raf = useRef<number>(0);
   const startTs = useRef<number>(0);
   const startVal = useRef<number>(0);
 
   useEffect(() => {
-    if (target === null) return;
+    if (target === null) { setCurrent(null); return; }
     cancelAnimationFrame(raf.current);
     startTs.current = performance.now();
-    startVal.current = current;
+    startVal.current = current ?? 0;
 
     const animate = (ts: number) => {
       const progress = Math.min((ts - startTs.current) / duration, 1);
@@ -56,11 +56,35 @@ function useCountUp(target: number | null, duration = 1000): string {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target]);
 
-  if (target === null) return "--";
-  return current.toLocaleString("vi-VN", { maximumFractionDigits: 2 });
+  return current;
 }
 
-// ── Sub-components ───────────────────────────────────────────────────────────
+// ── Widget shell ─────────────────────────────────────────────────────────────
+
+function Widget({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-1.5 p-3.5 sm:p-4 rounded-2xl border transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_0_24px_rgba(163,255,18,0.09)]",
+        className,
+      )}
+      style={{ background: "rgba(255,255,255,0.028)", borderColor: "rgba(163,255,18,0.13)" }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function WidgetLabel({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5 text-slate-500 text-[10px] sm:text-xs font-medium">
+      <Icon className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-accent shrink-0" />
+      <span className="truncate">{label}</span>
+    </div>
+  );
+}
+
+// ── VN-Index widget ───────────────────────────────────────────────────────────
 
 function IndexWidget({
   label, icon: Icon, data,
@@ -69,186 +93,204 @@ function IndexWidget({
   icon: React.ElementType;
   data: IndexData | null;
 }) {
-  const valueStr = useCountUp(data?.value ?? null);
+  const animated = useCountUp(data?.value ?? null);
   const isUp = (data?.change ?? 0) >= 0;
+  const displayVal = animated !== null
+    ? animated.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : "--";
 
   return (
-    <div className="market-widget group flex flex-col gap-1.5 p-4 rounded-2xl border transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_0_20px_rgba(163,255,18,0.08)]"
-      style={{
-        background: "rgba(255,255,255,0.03)",
-        borderColor: "rgba(163,255,18,0.12)",
-      }}
-    >
-      <div className="flex items-center gap-2 text-slate-500 text-xs font-medium">
-        <Icon className="w-3.5 h-3.5 text-accent" />
-        {label}
-      </div>
-      <div className={cn("font-mono font-bold text-lg leading-none", data ? "text-white" : "text-slate-600")}>
-        {data ? valueStr : "--"}
+    <Widget>
+      <WidgetLabel icon={Icon} label={label} />
+      <div className={cn("font-mono font-bold text-base sm:text-lg leading-none", data ? "text-white" : "text-slate-600")}>
+        {displayVal}
       </div>
       {data ? (
-        <div className={cn("text-xs font-mono font-semibold", isUp ? "text-profit" : "text-loss")}>
+        <div className={cn("text-[10px] sm:text-xs font-mono font-semibold", isUp ? "text-profit" : "text-loss")}>
           {isUp ? "▲" : "▼"} {Math.abs(data.change).toFixed(2)} ({isUp ? "+" : ""}{data.change_pct.toFixed(2)}%)
         </div>
       ) : (
-        <div className="text-xs text-slate-700">--</div>
+        <div className="text-[10px] text-slate-700">-- / --%</div>
       )}
-    </div>
+    </Widget>
   );
 }
 
+// ── Breadth widget ────────────────────────────────────────────────────────────
+
 function BreadthWidget({
-  label, icon: Icon, data,
+  label, icon: Icon, data, indexData,
 }: {
   label: string;
   icon: React.ElementType;
   data: BreadthData | null;
+  indexData?: IndexData | null;
 }) {
   const total = data ? (data.advance + data.decline + data.unchanged) || 1 : 1;
   const advPct = data ? (data.advance / total) * 100 : 0;
   const decPct = data ? (data.decline / total) * 100 : 0;
   const unchPct = data ? (data.unchanged / total) * 100 : 0;
 
-  return (
-    <div className="market-widget group flex flex-col gap-1.5 p-4 rounded-2xl border transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_0_20px_rgba(163,255,18,0.08)]"
-      style={{
-        background: "rgba(255,255,255,0.03)",
-        borderColor: "rgba(163,255,18,0.12)",
-      }}
-    >
-      <div className="flex items-center gap-2 text-slate-500 text-xs font-medium">
-        <Icon className="w-3.5 h-3.5 text-accent" />
-        {label}
-      </div>
+  const animated = useCountUp(indexData?.value ?? null);
+  const isUp = (indexData?.change ?? 0) >= 0;
+  const displayVal = animated !== null
+    ? animated.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : null;
 
+  return (
+    <Widget>
+      <WidgetLabel icon={Icon} label={label} />
+
+      {/* Index value if provided */}
+      {indexData !== undefined && (
+        <div className={cn("font-mono font-bold text-base sm:text-lg leading-none", indexData ? "text-white" : "text-slate-600")}>
+          {displayVal ?? "--"}
+        </div>
+      )}
+      {indexData && (
+        <div className={cn("text-[10px] font-mono font-semibold", isUp ? "text-profit" : "text-loss")}>
+          {isUp ? "▲" : "▼"} {Math.abs(indexData.change).toFixed(2)} ({isUp ? "+" : ""}{indexData.change_pct.toFixed(2)}%)
+        </div>
+      )}
+
+      {/* Breadth bar */}
       {data ? (
         <>
-          {/* Breadth bar */}
-          <div className="flex h-1.5 rounded-full overflow-hidden gap-[1px] mt-1">
+          <div className="flex h-1 rounded-full overflow-hidden gap-[1px] mt-0.5">
             <div className="rounded-full bg-profit transition-all duration-700" style={{ width: `${advPct}%` }} />
-            <div className="rounded-full bg-slate-600 transition-all duration-700" style={{ width: `${unchPct}%` }} />
+            <div className="rounded-full bg-slate-700 transition-all duration-700" style={{ width: `${unchPct}%` }} />
             <div className="rounded-full bg-loss transition-all duration-700" style={{ width: `${decPct}%` }} />
           </div>
-          {/* Counts */}
-          <div className="flex gap-2 text-[10px] font-mono mt-0.5">
-            <span className="text-profit">▲ {data.advance}</span>
-            <span className="text-slate-600">— {data.unchanged}</span>
-            <span className="text-loss">▼ {data.decline}</span>
+          <div className="flex gap-2 text-[9px] sm:text-[10px] font-mono mt-0.5">
+            <span className="text-profit">▲{data.advance}</span>
+            <span className="text-slate-600">—{data.unchanged}</span>
+            <span className="text-loss">▼{data.decline}</span>
           </div>
         </>
       ) : (
         <>
-          <div className="h-1.5 rounded-full bg-slate-800 mt-1" />
-          <div className="text-xs text-slate-700 mt-0.5">-- / -- / --</div>
+          <div className="h-1 rounded-full bg-slate-800 mt-0.5" />
+          <div className="text-[10px] text-slate-700">--/--/--</div>
         </>
       )}
-    </div>
+    </Widget>
   );
 }
 
+// ── Liquidity widget ──────────────────────────────────────────────────────────
+
 function LiquidityWidget({ valueTy, prevTy }: { valueTy: number | null; prevTy: number | null }) {
-  const countedVal = useCountUp(valueTy);
+  const animated = useCountUp(valueTy);
   const isUp = valueTy !== null && prevTy !== null ? valueTy >= prevTy : null;
+  const displayVal = animated !== null
+    ? animated.toLocaleString("vi-VN", { maximumFractionDigits: 0 })
+    : null;
 
   return (
-    <div className="market-widget group flex flex-col gap-1.5 p-4 rounded-2xl border transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_0_20px_rgba(163,255,18,0.08)]"
-      style={{
-        background: "rgba(255,255,255,0.03)",
-        borderColor: "rgba(163,255,18,0.12)",
-      }}
-    >
-      <div className="flex items-center gap-2 text-slate-500 text-xs font-medium">
-        <Wallet className="w-3.5 h-3.5 text-accent" />
-        Thanh khoản HOSE
-      </div>
-      <div className={cn("font-mono font-bold text-lg leading-none", valueTy !== null ? "text-white" : "text-slate-600")}>
-        {valueTy !== null ? `${countedVal} tỷ` : "--"}
+    <Widget>
+      <WidgetLabel icon={Wallet} label="Thanh khoản" />
+      <div className={cn("font-mono font-bold text-base sm:text-lg leading-none", valueTy !== null ? "text-white" : "text-slate-600")}>
+        {displayVal !== null ? `${displayVal} tỷ` : "--"}
       </div>
       {isUp !== null ? (
-        <div className={cn("text-xs font-mono font-semibold", isUp ? "text-profit" : "text-loss")}>
+        <div className={cn("text-[10px] sm:text-xs font-mono font-semibold", isUp ? "text-profit" : "text-loss")}>
           {isUp ? "▲" : "▼"} so hôm qua
         </div>
       ) : (
-        <div className="text-xs text-slate-700">--</div>
+        <div className="text-[10px] text-slate-700">HOSE</div>
       )}
-    </div>
+    </Widget>
   );
 }
 
-function ForeignWidget({ netTy }: { netTy: number | null }) {
-  const counted = useCountUp(netTy !== null ? Math.abs(netTy) : null);
-  const isNet = netTy !== null ? netTy >= 0 : null;
+// ── Volume widget ─────────────────────────────────────────────────────────────
+
+function VolumeWidget({ volumeMn }: { volumeMn: number | null }) {
+  const animated = useCountUp(volumeMn);
+  const displayVal = animated !== null
+    ? animated.toLocaleString("vi-VN", { maximumFractionDigits: 1 })
+    : null;
 
   return (
-    <div className="market-widget group flex flex-col gap-1.5 p-4 rounded-2xl border transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_0_20px_rgba(163,255,18,0.08)]"
-      style={{
-        background: "rgba(255,255,255,0.03)",
-        borderColor: "rgba(163,255,18,0.12)",
-      }}
-    >
-      <div className="flex items-center gap-2 text-slate-500 text-xs font-medium">
-        <Globe className="w-3.5 h-3.5 text-accent" />
-        Khối ngoại (ròng)
+    <Widget>
+      <WidgetLabel icon={BarChart2} label="Khối lượng" />
+      <div className={cn("font-mono font-bold text-base sm:text-lg leading-none", volumeMn !== null ? "text-white" : "text-slate-600")}>
+        {displayVal !== null ? `${displayVal} tr` : "--"}
       </div>
-      <div className={cn(
-        "font-mono font-bold text-lg leading-none",
-        isNet === null ? "text-slate-600" : isNet ? "text-profit" : "text-loss",
-      )}>
-        {netTy !== null ? `${isNet ? "+" : "-"}${counted} tỷ` : "--"}
-      </div>
-      <div className={cn("text-xs font-mono font-semibold", isNet === null ? "text-slate-700" : isNet ? "text-profit" : "text-loss")}>
-        {isNet === null ? "--" : isNet ? "Mua ròng" : "Bán ròng"}
-      </div>
-    </div>
+      <div className="text-[10px] text-slate-600 font-mono">triệu CP / HOSE</div>
+    </Widget>
   );
 }
 
-// ── Skeleton ─────────────────────────────────────────────────────────────────
+// ── Skeleton ──────────────────────────────────────────────────────────────────
 
 function WidgetSkeleton() {
   return (
-    <div className="flex flex-col gap-2 p-4 rounded-2xl border animate-pulse"
-      style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(163,255,18,0.07)" }}
+    <div
+      className="flex flex-col gap-2 p-3.5 sm:p-4 rounded-2xl border animate-pulse"
+      style={{ background: "rgba(255,255,255,0.018)", borderColor: "rgba(163,255,18,0.07)" }}
     >
-      <div className="h-3 w-20 bg-slate-800 rounded-full" />
-      <div className="h-5 w-24 bg-slate-700 rounded-full" />
-      <div className="h-3 w-16 bg-slate-800 rounded-full" />
+      <div className="h-2.5 w-16 bg-slate-800 rounded-full" />
+      <div className="h-5 w-20 bg-slate-700 rounded-full" />
+      <div className="h-2 w-14 bg-slate-800 rounded-full" />
     </div>
   );
 }
 
-// ── Main component ───────────────────────────────────────────────────────────
+// ── Timestamp ─────────────────────────────────────────────────────────────────
+
+function useNow(intervalMs = 1000) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export function MarketOverview() {
   const [data, setData] = useState<MarketData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lastFetch, setLastFetch] = useState<Date | null>(null);
   const [visible, setVisible] = useState(false);
+  const now = useNow(10_000);
+
+  const load = async () => {
+    try {
+      const res = await fetch("/api/market", { cache: "no-store" });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.data) {
+          setData(json.data);
+          setLastFetch(new Date());
+        }
+      }
+    } catch {
+      // keep previous data, degrade gracefully
+    } finally {
+      setLoading(false);
+      requestAnimationFrame(() => setVisible(true));
+    }
+  };
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await fetch("/api/market", { cache: "no-store" });
-        if (!res.ok) throw new Error("API error");
-        const json = await res.json();
-        if (json?.data) setData(json.data);
-      } catch {
-        // show "--" for all widgets — graceful degradation
-        setData({
-          vnindex: null, hnxindex: null, vn30: null,
-          hose_breadth: null, hnx_breadth: null,
-          liquidity_ty: null, liquidity_prev_ty: null,
-          foreign_net_ty: null,
-        });
-      } finally {
-        setLoading(false);
-        // Slight delay for fade-in after content is ready
-        requestAnimationFrame(() => setVisible(true));
-      }
-    };
     load();
-    const interval = setInterval(load, 5 * 60 * 1000);
+    const interval = setInterval(load, 60_000); // refresh mỗi 1 phút
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const secondsAgo = lastFetch
+    ? Math.round((now.getTime() - lastFetch.getTime()) / 1000)
+    : null;
+
+  const freshnessLabel =
+    secondsAgo === null ? null
+    : secondsAgo < 10   ? "Vừa cập nhật"
+    : secondsAgo < 60   ? `${secondsAgo}s trước`
+    : `${Math.floor(secondsAgo / 60)}p trước`;
 
   return (
     <div
@@ -257,39 +299,52 @@ export function MarketOverview() {
         visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2",
       )}
     >
-      {/* Card */}
       <div
-        className="rounded-[20px] border p-4 backdrop-blur-xl"
+        className="rounded-[20px] border p-3.5 sm:p-4 backdrop-blur-xl"
         style={{
-          background: "rgba(10,13,18,0.7)",
+          background: "rgba(10,13,18,0.72)",
           borderColor: "rgba(163,255,18,0.15)",
-          boxShadow: "0 0 0 1px rgba(163,255,18,0.06), 0 4px 40px rgba(163,255,18,0.04)",
+          boxShadow: "0 0 0 1px rgba(163,255,18,0.05), 0 8px 40px rgba(163,255,18,0.04)",
         }}
       >
         {/* Header */}
-        <div className="flex items-center gap-2 mb-3.5">
+        <div className="flex items-center gap-2 mb-3">
           <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse-slow" />
           <span className="text-[10px] font-semibold uppercase tracking-widest text-accent/70">
             Tổng quan thị trường
           </span>
-          {!loading && (
-            <span className="ml-auto text-[10px] text-slate-700">
-              Cập nhật mỗi 5 phút
-            </span>
+          {freshnessLabel && !loading && (
+            <span className="ml-auto text-[10px] text-slate-700 tabular-nums">{freshnessLabel}</span>
           )}
         </div>
 
-        {/* Grid of widgets */}
+        {/* 5 widgets grid: 2-col mobile → 3-col sm → 5-col lg */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           {loading ? (
             Array.from({ length: 5 }).map((_, i) => <WidgetSkeleton key={i} />)
           ) : (
             <>
-              <IndexWidget label="VN-Index"  icon={LineChart}         data={data?.vnindex ?? null}  />
-              <BreadthWidget label="HOSE"     icon={BarChart3}         data={data?.hose_breadth ?? null} />
-              <BreadthWidget label="HNX"      icon={CandlestickChart}  data={data?.hnx_breadth ?? null} />
-              <LiquidityWidget valueTy={data?.liquidity_ty ?? null}   prevTy={data?.liquidity_prev_ty ?? null} />
-              <ForeignWidget   netTy={data?.foreign_net_ty ?? null} />
+              <IndexWidget
+                label="VN-Index"
+                icon={TrendingUp}
+                data={data?.vnindex ?? null}
+              />
+              <BreadthWidget
+                label="HOSE"
+                icon={BarChart3}
+                data={data?.hose_breadth ?? null}
+              />
+              <BreadthWidget
+                label="HNX"
+                icon={CandlestickChart}
+                data={data?.hnx_breadth ?? null}
+                indexData={data?.hnxindex ?? null}
+              />
+              <LiquidityWidget
+                valueTy={data?.liquidity_ty ?? null}
+                prevTy={data?.liquidity_prev_ty ?? null}
+              />
+              <VolumeWidget volumeMn={data?.volume_mn_shares ?? null} />
             </>
           )}
         </div>

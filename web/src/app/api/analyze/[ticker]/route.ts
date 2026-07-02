@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 const BACKEND = process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_BACKEND_URL ?? "";
 
 export const maxDuration = 60;
+export const dynamic = "force-dynamic";
 
 async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
@@ -19,6 +20,14 @@ export async function GET(
   { params }: { params: Promise<{ ticker: string }> }
 ) {
   const { ticker } = await params;
+
+  if (!BACKEND) {
+    return NextResponse.json(
+      { detail: "Backend chưa được cấu hình. Liên hệ quản trị viên." },
+      { status: 503 },
+    );
+  }
+
   const search = request.nextUrl.searchParams.toString();
   const url = `${BACKEND}/analyze/${encodeURIComponent(ticker)}${search ? `?${search}` : ""}`;
 
