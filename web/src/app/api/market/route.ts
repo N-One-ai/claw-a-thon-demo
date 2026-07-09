@@ -141,6 +141,27 @@ function sumVolume(board: any[]): number {
   return +(board.reduce((s, x) => s + (x?.matchPrice?.accumulatedVolume ?? 0), 0) / 1_000_000).toFixed(1);
 }
 
+function sumForeignFlow(board: any[]): number | null {
+  // foreignBuyValue / foreignSellValue in triệu VND → divide by 1 000 → tỷ VND
+  let buy = 0, sell = 0;
+  for (const item of board) {
+    buy  += item?.matchPrice?.foreignBuyValue  ?? 0;
+    sell += item?.matchPrice?.foreignSellValue ?? 0;
+  }
+  if (buy === 0 && sell === 0) return null;
+  return +((buy - sell) / 1_000).toFixed(1);
+}
+
+function calcHealthScore(
+  changePct: number | null,
+  hose: { advance: number; decline: number; unchanged: number } | null,
+): number {
+  const total = hose ? (hose.advance + hose.decline + hose.unchanged) : 0;
+  const breadth   = total > 0 ? Math.round((hose!.advance / total) * 100) : 50;
+  const momentum  = Math.max(0, Math.min(100, Math.round(50 + ((changePct ?? 0) / 3) * 50)));
+  return Math.round(0.6 * breadth + 0.4 * momentum);
+}
+
 // ── VCI fallback ─────────────────────────────────────────────────────────────
 
 async function fetchFromVci() {
@@ -169,19 +190,27 @@ async function fetchFromVci() {
   const liq     = sumLiquidity(hoseBoard);
   const vol     = sumVolume(hoseBoard);
 
-  // HNX: merge index value + breadth
+  // HNX: only include when we have the index value
   const hnxIdx  = indexResult?.hnxindex ?? null;
   const hnxBrd  = calcBreadth(hnxBoard, 10);
-  const hasHnx  = hnxIdx || (hnxBrd.advance + hnxBrd.decline + hnxBrd.unchanged > 0);
+
+  const foreignFlow = sumForeignFlow(hoseBoard);
+  const hoseBreadth = hose.advance + hose.decline + hose.unchanged > 0 ? hose : null;
+  const healthScore = calcHealthScore(
+    indexResult?.vnindex?.change_pct ?? null,
+    hoseBreadth,
+  );
 
   return {
-    vnindex:    indexResult?.vnindex ?? null,
-    vn30:       indexResult?.vn30    ?? null,
-    hose:       hose.advance + hose.decline + hose.unchanged > 0 ? hose : null,
-    hnx:        hasHnx ? { ...(hnxIdx ?? {}), ...hnxBrd } : null,
-    liquidity:  liq > 0  ? liq : null,
-    volume:     vol > 0  ? vol : null,
-    sparklines: indexResult?.sparklines ?? { vnindex: [], hnxindex: [], vn30: [], volume: [] },
+    vnindex:     indexResult?.vnindex ?? null,
+    vn30:        indexResult?.vn30    ?? null,
+    hose:        hoseBreadth,
+    hnx:         hnxIdx ? { ...hnxIdx, ...hnxBrd } : null,
+    liquidity:   liq > 0  ? liq : null,
+    volume:      vol > 0  ? vol : null,
+    foreignFlow,
+    healthScore,
+    sparklines:  indexResult?.sparklines ?? { vnindex: [], hnxindex: [], vn30: [], volume: [] },
     errors,
   };
 }
