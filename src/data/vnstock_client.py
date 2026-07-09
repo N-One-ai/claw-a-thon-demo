@@ -116,7 +116,8 @@ class VnstockClient:
 
     def _stock(self, ticker: str):
         """Shortcut tạo stock object cho ticker."""
-        return self._get_vn().stock(symbol=ticker, source=self._source)
+        with vnstock_call(f"Vnstock.stock/{ticker}"):
+            return self._get_vn().stock(symbol=ticker, source=self._source)
 
     # ------------------------------------------------------------------ #
     # Company Info                                                         #
