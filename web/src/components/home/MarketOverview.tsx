@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { TrendingUp, BarChart3, CandlestickChart, Wallet, BarChart2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,13 +18,20 @@ interface BreadthData {
   unchanged: number;
 }
 
+interface SparklineData {
+  vnindex:  number[];
+  hnxindex: number[];
+  volume:   number[];
+}
+
 interface MarketData {
-  vnindex:   IndexData | null;
-  hose:      BreadthData | null;
-  hnx:       (IndexData & BreadthData) | null;
-  liquidity: number | null;   // tỷ VND
-  volume:    number | null;   // triệu CP
-  errors:    string[];
+  vnindex:    IndexData | null;
+  hose:       BreadthData | null;
+  hnx:        (IndexData & BreadthData) | null;
+  liquidity:  number | null;
+  volume:     number | null;
+  sparklines?: SparklineData;
+  errors:     string[];
 }
 
 // ── Animated counter ──────────────────────────────────────────────────────────
@@ -56,12 +63,89 @@ function useCountUp(target: number | null, duration = 900): number | null {
   return current;
 }
 
+// ── Sparkline SVG ─────────────────────────────────────────────────────────────
+
+const PROFIT = "#7CFF3B";
+const LOSS   = "#FF5A76";
+
+function Sparkline({ data, color = PROFIT }: { data?: number[]; color?: string }) {
+  const id = useId();
+  if (!data || data.length < 2) return <div style={{ height: 38 }} />;
+
+  const W = 200, H = 38;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+
+  // Map values → SVG coords (2 px vertical padding)
+  const pts: [number, number][] = data.map((v, i) => [
+    (i / (data.length - 1)) * W,
+    H - 2 - ((v - min) / range) * (H - 4),
+  ]);
+
+  // Catmull-Rom → cubic Bézier for smooth curve
+  let line = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for (let i = 1; i < pts.length; i++) {
+    const [x0, y0] = pts[Math.max(0, i - 2)];
+    const [x1, y1] = pts[i - 1];
+    const [x2, y2] = pts[i];
+    const [x3, y3] = pts[Math.min(pts.length - 1, i + 1)];
+    const cp1x = (x1 + (x2 - x0) / 6).toFixed(2);
+    const cp1y = (y1 + (y2 - y0) / 6).toFixed(2);
+    const cp2x = (x2 - (x3 - x1) / 6).toFixed(2);
+    const cp2y = (y2 - (y3 - y1) / 6).toFixed(2);
+    line += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${x2.toFixed(2)},${y2.toFixed(2)}`;
+  }
+
+  const [lx, ly] = pts[pts.length - 1];
+  const area = `${line} L${lx},${H} L0,${H} Z`;
+  const gradId = `${id}g`;
+  const filtId = `${id}f`;
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      className="w-full"
+      style={{ height: H, display: "block", marginTop: 6 }}
+    >
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor={color} stopOpacity="0.30" />
+          <stop offset="75%"  stopColor={color} stopOpacity="0.06" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+        <filter id={filtId} x="-20%" y="-50%" width="140%" height="200%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+      </defs>
+      {/* Gradient area fill */}
+      <path d={area} fill={`url(#${gradId})`} />
+      {/* Glow pass */}
+      <path
+        d={line} fill="none" stroke={color} strokeWidth="3"
+        strokeLinecap="round" strokeLinejoin="round"
+        opacity="0.3" filter={`url(#${filtId})`}
+      />
+      {/* Crisp line */}
+      <path
+        d={line} fill="none" stroke={color} strokeWidth="1.5"
+        strokeLinecap="round" strokeLinejoin="round" opacity="0.9"
+      />
+      {/* Terminal dot */}
+      <circle cx={lx} cy={ly} r="4"   fill={color} opacity="0.18" />
+      <circle cx={lx} cy={ly} r="2.2" fill={color} opacity="0.95" />
+    </svg>
+  );
+}
+
 // ── Widget shell ──────────────────────────────────────────────────────────────
 
 function Widget({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="flex flex-col gap-1.5 p-3.5 sm:p-4 rounded-2xl border transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_0_24px_rgba(163,255,18,0.09)]"
+      className="flex flex-col gap-1.5 p-3.5 sm:p-4 rounded-2xl border transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_0_24px_rgba(163,255,18,0.09)] overflow-hidden"
       style={{ background: "rgba(255,255,255,0.028)", borderColor: "rgba(163,255,18,0.13)" }}
     >
       {children}
@@ -129,16 +213,19 @@ function BreadthBar({ data }: { data: BreadthData | null }) {
 
 // ── The 5 widgets ─────────────────────────────────────────────────────────────
 
-function VNIndexWidget({ data }: { data: IndexData | null }) {
+function VNIndexWidget({ data, sparkline }: { data: IndexData | null; sparkline?: number[] }) {
+  const color = (data?.change ?? 0) >= 0 ? PROFIT : LOSS;
   return (
     <Widget>
       <Label icon={TrendingUp} text="VN-Index" />
       <IndexVal data={data} />
+      <Sparkline data={sparkline} color={color} />
     </Widget>
   );
 }
 
-function HOSEWidget({ data }: { data: BreadthData | null }) {
+function HOSEWidget({ data, sparkline }: { data: BreadthData | null; sparkline?: number[] }) {
+  const color = data ? (data.advance >= data.decline ? PROFIT : LOSS) : PROFIT;
   return (
     <Widget>
       <Label icon={BarChart3} text="HOSE" />
@@ -146,22 +233,27 @@ function HOSEWidget({ data }: { data: BreadthData | null }) {
         {data ? `${data.advance + data.decline + data.unchanged} mã` : "--"}
       </div>
       <BreadthBar data={data} />
+      <Sparkline data={sparkline} color={color} />
     </Widget>
   );
 }
 
-function HNXWidget({ data }: { data: (IndexData & BreadthData) | null }) {
+function HNXWidget({ data, sparkline }: { data: (IndexData & BreadthData) | null; sparkline?: number[] }) {
+  const color = (data?.change ?? 0) >= 0 ? PROFIT : LOSS;
   return (
     <Widget>
       <Label icon={CandlestickChart} text="HNX-Index" />
       <IndexVal data={data} />
-      <BreadthBar data={data} />
+      <Sparkline data={sparkline} color={color} />
     </Widget>
   );
 }
 
-function LiquidityWidget({ value }: { value: number | null }) {
+function LiquidityWidget({ value, sparkline }: { value: number | null; sparkline?: number[] }) {
   const animated = useCountUp(value);
+  const color = sparkline && sparkline.length >= 2
+    ? (sparkline[sparkline.length - 1] >= sparkline[sparkline.length - 2] ? PROFIT : LOSS)
+    : PROFIT;
   return (
     <Widget>
       <Label icon={Wallet} text="Thanh khoản" />
@@ -171,12 +263,16 @@ function LiquidityWidget({ value }: { value: number | null }) {
           : "--"}
       </div>
       <div className="text-[10px] text-slate-600 font-mono">VND · HOSE</div>
+      <Sparkline data={sparkline} color={color} />
     </Widget>
   );
 }
 
-function VolumeWidget({ value }: { value: number | null }) {
+function VolumeWidget({ value, sparkline }: { value: number | null; sparkline?: number[] }) {
   const animated = useCountUp(value);
+  const color = sparkline && sparkline.length >= 2
+    ? (sparkline[sparkline.length - 1] >= sparkline[sparkline.length - 2] ? PROFIT : LOSS)
+    : PROFIT;
   return (
     <Widget>
       <Label icon={BarChart2} text="Khối lượng" />
@@ -186,6 +282,7 @@ function VolumeWidget({ value }: { value: number | null }) {
           : "--"}
       </div>
       <div className="text-[10px] text-slate-600 font-mono">triệu CP · HOSE</div>
+      <Sparkline data={sparkline} color={color} />
     </Widget>
   );
 }
@@ -201,6 +298,7 @@ function WidgetSkeleton() {
       <div className="h-2.5 w-16 bg-slate-800 rounded-full" />
       <div className="h-5 w-20 bg-slate-700 rounded-full" />
       <div className="h-2   w-14 bg-slate-800 rounded-full" />
+      <div className="h-9   w-full bg-slate-800/50 rounded-lg mt-1" />
     </div>
   );
 }
@@ -255,6 +353,8 @@ export function MarketOverview() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const sl = data?.sparklines;
+
   return (
     <div
       className={cn(
@@ -287,11 +387,11 @@ export function MarketOverview() {
             Array.from({ length: 5 }).map((_, i) => <WidgetSkeleton key={i} />)
           ) : (
             <>
-              <VNIndexWidget  data={data?.vnindex   ?? null} />
-              <HOSEWidget     data={data?.hose       ?? null} />
-              <HNXWidget      data={data?.hnx        ?? null} />
-              <LiquidityWidget value={data?.liquidity ?? null} />
-              <VolumeWidget    value={data?.volume    ?? null} />
+              <VNIndexWidget  data={data?.vnindex   ?? null} sparkline={sl?.vnindex} />
+              <HOSEWidget     data={data?.hose       ?? null} sparkline={sl?.vnindex} />
+              <HNXWidget      data={data?.hnx        ?? null} sparkline={sl?.hnxindex} />
+              <LiquidityWidget value={data?.liquidity ?? null} sparkline={sl?.volume} />
+              <VolumeWidget    value={data?.volume    ?? null} sparkline={sl?.volume} />
             </>
           )}
         </div>

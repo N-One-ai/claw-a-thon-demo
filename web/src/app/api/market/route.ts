@@ -56,15 +56,18 @@ interface IndexData {
   change_pct: number;
 }
 
-async function fetchOneIndex(vpsSymbol: string): Promise<IndexData | null> {
+async function fetchVpsSymbol(symbol: string): Promise<{ closes: number[]; volumes: number[] } | null> {
   const now  = Math.floor(Date.now() / 1000);
-  const from = now - 86400 * 3; // 3 days back to ensure we get prev close
-  const url  = `${VPS_FEED}?symbol=${vpsSymbol}&resolution=D&from=${from}&to=${now + 86400}`;
+  const from = now - 86400 * 37; // ~37 calendar days ≈ 25 trading days
+  const url  = `${VPS_FEED}?symbol=${symbol}&resolution=D&from=${from}&to=${now + 86400}`;
   const res  = await fetch(url, { headers: VPS_HEADERS, signal: AbortSignal.timeout(8_000) });
   if (!res.ok) return null;
   const data = await res.json();
   if (data?.s !== "ok") return null;
-  const closes: number[] = data.c ?? [];
+  return { closes: data.c ?? [], volumes: data.v ?? [] };
+}
+
+function toIndexData(closes: number[]): IndexData | null {
   if (closes.length < 2) return null;
   const value  = closes[closes.length - 1];
   const prev   = closes[closes.length - 2];
@@ -73,14 +76,25 @@ async function fetchOneIndex(vpsSymbol: string): Promise<IndexData | null> {
   return { value: +value.toFixed(2), change, change_pct: pct };
 }
 
-async function fetchIndexData(): Promise<Record<string, IndexData | null>> {
+async function fetchIndexData(): Promise<{
+  vnindex:   IndexData | null;
+  hnxindex:  IndexData | null;
+  sparklines: { vnindex: number[]; hnxindex: number[]; volume: number[] };
+}> {
   const [vnRes, hnxRes] = await Promise.allSettled([
-    fetchOneIndex("VNINDEX"),
-    fetchOneIndex("HNXINDEX"),
+    fetchVpsSymbol("VNINDEX"),
+    fetchVpsSymbol("HNXINDEX"),
   ]);
+  const vn  = vnRes.status  === "fulfilled" ? vnRes.value  : null;
+  const hnx = hnxRes.status === "fulfilled" ? hnxRes.value : null;
   return {
-    VNINDEX:  vnRes.status  === "fulfilled" ? vnRes.value  : null,
-    HNXIndex: hnxRes.status === "fulfilled" ? hnxRes.value : null,
+    vnindex:   vn  ? toIndexData(vn.closes)  : null,
+    hnxindex:  hnx ? toIndexData(hnx.closes) : null,
+    sparklines: {
+      vnindex:  vn?.closes  ?? [],
+      hnxindex: hnx?.closes ?? [],
+      volume:   vn?.volumes ?? [],
+    },
   };
 }
 
@@ -133,8 +147,7 @@ async function fetchFromVci() {
     fetchPriceBoard(HNX_SAMPLE),
   ]);
 
-  const chart: Record<string, IndexData | null> =
-    indexRes.status === "fulfilled" ? indexRes.value : {};
+  const indexResult = indexRes.status === "fulfilled" ? indexRes.value : null;
   if (indexRes.status === "rejected")
     errors.push(`index_data: ${indexRes.reason}`);
 
@@ -152,16 +165,17 @@ async function fetchFromVci() {
   const vol     = sumVolume(hoseBoard);
 
   // HNX: merge index value + breadth
-  const hnxIdx  = chart["HNXIndex"] ?? null;
+  const hnxIdx  = indexResult?.hnxindex ?? null;
   const hnxBrd  = calcBreadth(hnxBoard, 10);
   const hasHnx  = hnxIdx || (hnxBrd.advance + hnxBrd.decline + hnxBrd.unchanged > 0);
 
   return {
-    vnindex:   chart["VNINDEX"]   ?? null,
-    hose:      hose.advance + hose.decline + hose.unchanged > 0 ? hose : null,
-    hnx:       hasHnx ? { ...(hnxIdx ?? {}), ...hnxBrd } : null,
-    liquidity: liq > 0  ? liq : null,
-    volume:    vol > 0  ? vol : null,
+    vnindex:    indexResult?.vnindex ?? null,
+    hose:       hose.advance + hose.decline + hose.unchanged > 0 ? hose : null,
+    hnx:        hasHnx ? { ...(hnxIdx ?? {}), ...hnxBrd } : null,
+    liquidity:  liq > 0  ? liq : null,
+    volume:     vol > 0  ? vol : null,
+    sparklines: indexResult?.sparklines ?? { vnindex: [], hnxindex: [], volume: [] },
     errors,
   };
 }
