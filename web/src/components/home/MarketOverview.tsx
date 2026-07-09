@@ -1,17 +1,12 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Types
-// ─────────────────────────────────────────────────────────────────────────────
-
+// ── Types ─────────────────────────────────────────────────────────────────────
 interface IndexData   { value: number; change: number; change_pct: number }
 interface BreadthData { advance: number; decline: number; unchanged: number }
-interface SparklineData {
-  vnindex: number[]; hnxindex: number[]; vn30: number[]; volume: number[];
-}
+interface SparklineData { vnindex: number[]; hnxindex: number[]; vn30: number[]; volume: number[] }
 interface MarketData {
   vnindex:     IndexData | null;
   vn30:        IndexData | null;
@@ -25,47 +20,104 @@ interface MarketData {
   errors:      string[];
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Design tokens
-// ─────────────────────────────────────────────────────────────────────────────
-
+// ── Design tokens ─────────────────────────────────────────────────────────────
 const POS   = "#7CFF4A";
 const NEG   = "#FF5C7A";
 const WARN  = "#FFB020";
-const MUTED = "#94A3B8";
+const MUTED = "#64748B";
 
-function indexColor(change?: number | null) {
-  return (change ?? 0) >= 0 ? POS : NEG;
+function priceColor(v?: number | null) { return (v ?? 0) >= 0 ? POS : NEG; }
+
+// ── AI Insights (derived client-side from market data) ────────────────────────
+interface Insights {
+  bullets:           string[];
+  score:             number;
+  risk:              string;
+  riskColor:         string;
+  sentiment:         string;
+  sentimentColor:    string;
+  recommendation:    string[];
 }
 
-function healthMeta(score: number): { label: string; color: string } {
-  if (score < 35) return { label: "Giảm mạnh",  color: NEG  };
-  if (score < 48) return { label: "Thận trọng", color: WARN };
-  if (score < 55) return { label: "Trung lập",  color: MUTED };
-  if (score < 70) return { label: "Tích cực",   color: POS  };
-  return             { label: "Tăng mạnh",       color: "#A3FF12" };
+function deriveInsights(d: MarketData): Insights {
+  const score  = d.healthScore ?? 50;
+  const vnIdx  = d.vnindex;
+  const hose   = d.hose;
+  const ff     = d.foreignFlow;
+  const liq    = d.liquidity;
+  const sl     = d.sparklines?.vnindex ?? [];
+  const bullets: string[] = [];
+
+  // Trend bullet
+  if (vnIdx) {
+    if (sl.length >= 10) {
+      const ra = sl.slice(-5).reduce((s, v) => s + v, 0) / 5;
+      const oa = sl.slice(-10, -5).reduce((s, v) => s + v, 0) / 5;
+      if      (ra > oa * 1.01) bullets.push("VN-Index duy trì xu hướng tăng trung hạn.");
+      else if (ra < oa * 0.99) bullets.push("VN-Index đang trong giai đoạn điều chỉnh ngắn hạn.");
+      else                      bullets.push("VN-Index đang tích lũy trong biên độ hẹp.");
+    } else {
+      const dir = vnIdx.change >= 0 ? "tăng" : "giảm";
+      bullets.push(`VN-Index ${dir} ${Math.abs(vnIdx.change_pct).toFixed(2)}% trong phiên gần nhất.`);
+    }
+  }
+
+  // Liquidity bullet
+  if (liq !== null) {
+    if      (liq >= 15000) bullets.push("Thanh khoản rất cao — dòng tiền tham gia tích cực.");
+    else if (liq >= 8000)  bullets.push("Thanh khoản duy trì trên mức trung bình 20 phiên.");
+    else                    bullets.push("Thanh khoản thấp — dòng tiền đang thận trọng.");
+  }
+
+  // Foreign flow bullet
+  if (ff !== null) {
+    if      (ff >  100) bullets.push("Khối ngoại mua ròng — tín hiệu tích cực từ dòng tiền nước ngoài.");
+    else if (ff < -100) bullets.push("Khối ngoại bán ròng — áp lực từ dòng tiền nước ngoài.");
+    else                 bullets.push("Khối ngoại giao dịch cân bằng trong phiên.");
+  }
+
+  // Breadth bullet
+  if (hose) {
+    const total = hose.advance + hose.decline + hose.unchanged;
+    const pct   = total > 0 ? (hose.advance / total) * 100 : 50;
+    if      (pct >= 55) bullets.push("Độ rộng thị trường tích cực — đa số cổ phiếu tăng giá.");
+    else if (pct <= 35) bullets.push("Áp lực bán lan rộng — chưa có tín hiệu phục hồi rõ ràng.");
+    else                 bullets.push("Chưa xuất hiện tín hiệu đảo chiều đáng kể.");
+  }
+
+  const risk          = score >= 65 ? "Thấp"    : score < 40 ? "Cao"       : "Trung bình";
+  const riskColor     = score >= 65 ? POS        : score < 40 ? NEG         : WARN;
+  const sentiment     = score >= 60 ? "Tích cực" : score < 40 ? "Tiêu cực" : "Trung lập";
+  const sentimentColor = score >= 60 ? POS       : score < 40 ? NEG         : MUTED;
+
+  const recommendation = score >= 65
+    ? ["Tiếp tục nắm giữ doanh nghiệp chất lượng.", "Tích lũy từng phần ở vùng giá hợp lý."]
+    : score >= 50
+    ? ["Duy trì danh mục hiện tại, thận trọng với vị thế mới.", "Ưu tiên cổ phiếu cơ bản tốt, thanh khoản cao."]
+    : ["Giảm tỷ trọng rủi ro, nâng tỷ lệ tiền mặt.", "Chờ tín hiệu xác nhận trước khi mua thêm."];
+
+  return {
+    bullets: bullets.slice(0, 4),
+    score, risk, riskColor, sentiment, sentimentColor, recommendation,
+  };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  useCountUp
-// ─────────────────────────────────────────────────────────────────────────────
-
+// ── useCountUp ────────────────────────────────────────────────────────────────
 function useCountUp(target: number | null, ms = 820): number | null {
-  const [cur, setCur] = useState<number | null>(null);
-  const raf  = useRef<number>(0);
-  const t0   = useRef<number>(0);
-  const from = useRef<number>(0);
+  const [cur,  setCur]  = useState<number | null>(null);
+  const raf   = useRef<number>(0);
+  const t0    = useRef<number>(0);
+  const from  = useRef<number>(0);
 
   useEffect(() => {
     if (target === null) { setCur(null); return; }
     cancelAnimationFrame(raf.current);
     t0.current   = performance.now();
     from.current = cur ?? target * 0.92;
-
     const tick = (ts: number) => {
-      const p    = Math.min((ts - t0.current) / ms, 1);
-      const ease = 1 - Math.pow(1 - p, 3);
-      setCur(from.current + (target - from.current) * ease);
+      const p = Math.min((ts - t0.current) / ms, 1);
+      const e = 1 - Math.pow(1 - p, 3);
+      setCur(from.current + (target - from.current) * e);
       if (p < 1) raf.current = requestAnimationFrame(tick);
       else        setCur(target);
     };
@@ -77,305 +129,341 @@ function useCountUp(target: number | null, ms = 820): number | null {
   return cur;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Sparkline (Catmull-Rom smooth curve)
-// ─────────────────────────────────────────────────────────────────────────────
+// ── LIVE badge ────────────────────────────────────────────────────────────────
+function LiveBadge({ lastFetch }: { lastFetch: Date | null }) {
+  const [secs, setSecs] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (lastFetch) setSecs(Math.round((Date.now() - lastFetch.getTime()) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [lastFetch]);
 
-function Sparkline({
-  data,
-  color,
-  height  = 48,
-  stroke  = 1.5,
-}: {
-  data?:   number[];
-  color:   string;
-  height?: number;
-  stroke?: number;
-}) {
-  const uid = useId();
-  if (!data || data.length < 2) return <div style={{ height }} />;
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex items-center gap-1.5">
+        <span
+          className="w-[5px] h-[5px] rounded-full animate-pulse"
+          style={{ background: "#4AFF91", boxShadow: "0 0 6px #4AFF9180" }}
+        />
+        <span className="text-[9px] font-bold tracking-[0.22em] uppercase" style={{ color: "#4AFF91" }}>
+          LIVE
+        </span>
+      </span>
+      {lastFetch && (
+        <span className="text-[10px]" style={{ color: "#334155" }}>
+          Cập nhật {secs < 5 ? "vừa xong" : `${secs}s trước`}
+        </span>
+      )}
+    </div>
+  );
+}
 
-  const W   = 400;
-  const H   = height;
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const rng = max - min || 1;
-  const py  = 3;
+// ── Interactive VN-Index chart ────────────────────────────────────────────────
+function PremiumChart({ data, color = POS }: { data: number[]; color?: string }) {
+  const uid      = useId();
+  const svgRef   = useRef<SVGSVGElement>(null);
+  const [hIdx,   setHIdx] = useState<number | null>(null);
 
-  const pts: [number, number][] = data.map((v, i) => [
-    (i / (data.length - 1)) * W,
-    H - py - ((v - min) / rng) * (H - py * 2),
-  ]);
+  if (!data || data.length < 2) {
+    return (
+      <div className="flex items-center justify-center h-full text-sm" style={{ color: MUTED }}>
+        Đang tải dữ liệu biểu đồ...
+      </div>
+    );
+  }
 
-  let path = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  const W = 600; const H = 260;
+  const PL = 8; const PR = 8; const PT = 16; const PB = 8;
+  const CW = W - PL - PR; const CH = H - PT - PB;
+
+  const rawMin = Math.min(...data); const rawMax = Math.max(...data);
+  const pad    = (rawMax - rawMin) * 0.08;
+  const lo     = rawMin - pad;    const hi  = rawMax + pad;
+  const rng    = hi - lo;
+
+  const toX = (i: number) => PL + (i / (data.length - 1)) * CW;
+  const toY = (v: number) => PT + (1 - (v - lo) / rng) * CH;
+
+  const pts: [number, number][] = data.map((v, i) => [toX(i), toY(v)]);
+
+  let linePath = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
   for (let i = 1; i < pts.length; i++) {
     const [x0, y0] = pts[Math.max(0, i - 2)];
     const [x1, y1] = pts[i - 1];
     const [x2, y2] = pts[i];
     const [x3, y3] = pts[Math.min(pts.length - 1, i + 1)];
-    path += ` C${(x1+(x2-x0)/6).toFixed(2)},${(y1+(y2-y0)/6).toFixed(2)} ${(x2-(x3-x1)/6).toFixed(2)},${(y2-(y3-y1)/6).toFixed(2)} ${x2.toFixed(2)},${y2.toFixed(2)}`;
+    linePath += ` C${(x1+(x2-x0)/6).toFixed(2)},${(y1+(y2-y0)/6).toFixed(2)} ${(x2-(x3-x1)/6).toFixed(2)},${(y2-(y3-y1)/6).toFixed(2)} ${x2.toFixed(2)},${y2.toFixed(2)}`;
   }
 
   const [lx, ly] = pts[pts.length - 1];
-  const area = `${path} L${lx},${H} L0,${H} Z`;
-  const gid  = `${uid}g`;
-  const fid  = `${uid}f`;
+  const areaPath  = `${linePath} L${lx},${H - PB} L${PL},${H - PB} Z`;
+
+  const gId  = `${uid}g`;
+  const glow = `${uid}gw`;
+
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const svgX = ((e.clientX - rect.left) / rect.width) * W;
+    const idx  = Math.max(0, Math.min(data.length - 1,
+      Math.round(((svgX - PL) / CW) * (data.length - 1))
+    ));
+    setHIdx(idx);
+  };
+
+  // 4 Y-axis grid lines
+  const yTicks = Array.from({ length: 4 }, (_, i) => {
+    const v = lo + (i / 3) * rng;
+    return { y: toY(v), label: Math.round(v).toLocaleString("vi-VN") };
+  });
+
+  const hx = hIdx !== null ? pts[hIdx][0] : null;
+  const hy = hIdx !== null ? pts[hIdx][1] : null;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
-      className="w-full" style={{ height, display: "block" }}>
+    <svg
+      ref={svgRef}
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      className="w-full h-full"
+      style={{ display: "block", cursor: hIdx !== null ? "crosshair" : "default" }}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => setHIdx(null)}
+    >
       <defs>
-        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor={color} stopOpacity="0.20" />
-          <stop offset="65%"  stopColor={color} stopOpacity="0.04" />
+        <linearGradient id={gId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor={color} stopOpacity="0.24" />
+          <stop offset="60%"  stopColor={color} stopOpacity="0.05" />
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
-        <filter id={fid} x="-5%" y="-60%" width="110%" height="220%">
-          <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="b" />
+        <filter id={glow} x="-5%" y="-40%" width="110%" height="180%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="b" />
           <feComposite in="SourceGraphic" in2="b" operator="over" />
         </filter>
       </defs>
-      <path d={area} fill={`url(#${gid})`} />
-      <path d={path} fill="none" stroke={color} strokeWidth={stroke * 2.2}
-        strokeLinecap="round" strokeLinejoin="round" opacity="0.22" filter={`url(#${fid})`} />
-      <path d={path} fill="none" stroke={color} strokeWidth={stroke}
-        strokeLinecap="round" strokeLinejoin="round" opacity="0.90" />
-      <circle cx={lx} cy={ly} r={stroke * 3.5} fill={color} opacity="0.15" />
-      <circle cx={lx} cy={ly} r={stroke * 1.2} fill={color} opacity="0.95" />
+
+      {/* Grid lines + Y labels (right-aligned, inside chart) */}
+      {yTicks.map((t, i) => (
+        <g key={i}>
+          <line x1={PL} y1={t.y} x2={W - PR} y2={t.y}
+            stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
+          {i > 0 && i < 3 && (
+            <text x={W - PR - 4} y={t.y - 4} textAnchor="end"
+              fontSize="9" fill="#334155" fontFamily="ui-monospace,monospace">
+              {t.label}
+            </text>
+          )}
+        </g>
+      ))}
+
+      {/* Area */}
+      <path d={areaPath} fill={`url(#${gId})`} />
+
+      {/* Glow line */}
+      <path d={linePath} fill="none" stroke={color} strokeWidth="5"
+        strokeLinecap="round" strokeLinejoin="round"
+        opacity="0.18" filter={`url(#${glow})`} />
+
+      {/* Main line */}
+      <path d={linePath} fill="none" stroke={color} strokeWidth="1.8"
+        strokeLinecap="round" strokeLinejoin="round" opacity="0.92" />
+
+      {/* Resting end-dot */}
+      {hIdx === null && (
+        <>
+          <circle cx={lx} cy={ly} r="6"   fill={color} opacity="0.14" />
+          <circle cx={lx} cy={ly} r="2.5" fill={color} opacity="0.9"  />
+        </>
+      )}
+
+      {/* Hover state */}
+      {hIdx !== null && hx !== null && hy !== null && (
+        <g>
+          <line x1={hx} y1={PT} x2={hx} y2={H - PB}
+            stroke="rgba(255,255,255,0.12)" strokeWidth="1" strokeDasharray="4,3" />
+          <circle cx={hx} cy={hy} r="8"   fill={color} opacity="0.12" />
+          <circle cx={hx} cy={hy} r="2.5" fill={color} opacity="0.95" />
+
+          {/* Tooltip */}
+          {(() => {
+            const bw = 122; const bh = 40;
+            const bx = Math.max(PL + 2, Math.min(W - PR - bw - 2, hx - bw / 2));
+            const by = Math.max(PT + 2, hy - bh - 12);
+            const val = data[hIdx].toLocaleString("vi-VN", {
+              minimumFractionDigits: 2, maximumFractionDigits: 2,
+            });
+            const daysAgo = data.length - 1 - hIdx;
+            const d = new Date();
+            d.setDate(d.getDate() - daysAgo);
+            const dateStr = `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}`;
+            return (
+              <g>
+                <rect x={bx} y={by} width={bw} height={bh} rx="7"
+                  fill="rgba(8,12,20,0.96)" stroke="rgba(255,255,255,0.10)" strokeWidth="0.5" />
+                <text x={bx + bw / 2} y={by + 16} textAnchor="middle"
+                  fontSize="13" fill="#FFFFFF" fontWeight="700" fontFamily="ui-monospace,monospace">
+                  {val}
+                </text>
+                <text x={bx + bw / 2} y={by + 31} textAnchor="middle"
+                  fontSize="10" fill={MUTED} fontFamily="ui-sans-serif,sans-serif">
+                  {dateStr}
+                </text>
+              </g>
+            );
+          })()}
+        </g>
+      )}
     </svg>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  LIVE badge + elapsed time
-// ─────────────────────────────────────────────────────────────────────────────
-
-function LiveBadge({ lastFetch }: { lastFetch: Date | null }) {
-  const [secs, setSecs] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      if (lastFetch) setSecs(Math.round((Date.now() - lastFetch.getTime()) / 1000));
-    }, 1_000);
-    return () => clearInterval(id);
-  }, [lastFetch]);
-
-  const label = !lastFetch ? ""
-    : secs < 5  ? "Vừa cập nhật"
-    : secs < 60 ? `${secs}s trước`
-    : `${Math.floor(secs / 60)}p trước`;
-
-  return (
-    <div className="flex items-center gap-2.5">
-      <span className="flex items-center gap-1.5">
-        <span className="w-[5px] h-[5px] rounded-full animate-pulse"
-          style={{ background: "#4AFF91", boxShadow: "0 0 6px #4AFF9180" }} />
-        <span className="text-[10px] font-semibold tracking-[0.16em] uppercase"
-          style={{ color: "#4AFF91" }}>LIVE</span>
-      </span>
-      {label && (
-        <span className="text-[10px] tabular-nums" style={{ color: "#475569" }}>{label}</span>
-      )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Index KPI (VN-Index / VN30 / HNX-Index)
-// ─────────────────────────────────────────────────────────────────────────────
-
-function IndexKPI({
-  label,
-  data,
-  sparkline,
-}: {
-  label:     string;
-  data:      IndexData | null;
-  sparkline?: number[];
-}) {
-  // Guard against undefined value at runtime (hnx may have breadth-only shape)
-  const safeData: IndexData | null =
-    data && typeof data.value === "number" ? data : null;
-
-  const animated = useCountUp(safeData?.value ?? null);
-  const color    = indexColor(safeData?.change);
-  const isUp     = (safeData?.change ?? 0) >= 0;
-
-  return (
-    <div className="flex flex-col">
-      {/* Label */}
-      <div className="text-[10px] font-medium uppercase tracking-[0.15em] mb-2"
-        style={{ color: "#475569" }}>
-        {label}
-      </div>
-
-      {/* Value */}
-      <div className="text-[22px] sm:text-[28px] font-mono font-bold leading-none tabular-nums"
-        style={{ color: safeData ? "#FFFFFF" : "#1E293B" }}>
-        {safeData && animated !== null
-          ? animated.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-          : "--"}
-      </div>
-
-      {/* Change */}
-      <div className="text-[11px] sm:text-xs font-mono font-semibold mt-1 tabular-nums"
-        style={{ color: safeData ? color : "#1E293B" }}>
-        {safeData
-          ? `${isUp ? "+" : ""}${safeData.change.toFixed(2)}   ${isUp ? "+" : ""}${safeData.change_pct.toFixed(2)}%`
-          : "--  (--)"}
-      </div>
-
-      {/* Mini sparkline — only when data provided */}
-      {sparkline && sparkline.length >= 2 && (
-        <div className="mt-3">
-          <Sparkline data={sparkline} color={color} height={28} stroke={1.2} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Health score bar
-// ─────────────────────────────────────────────────────────────────────────────
-
-function HealthScore({ score }: { score: number | null }) {
+// ── Score bar ─────────────────────────────────────────────────────────────────
+function ScoreBar({ score }: { score: number }) {
   const animated = useCountUp(score);
-  const s   = score ?? 0;
-  const meta = healthMeta(s);
+  const color    = score >= 65 ? POS : score < 40 ? NEG : WARN;
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Row: label ── score + status */}
+    <div className="space-y-2.5">
       <div className="flex items-baseline justify-between">
-        <span className="text-[10px] font-medium uppercase tracking-[0.15em]"
-          style={{ color: "#475569" }}>
-          Sức khỏe thị trường
+        <span className="text-[10px] font-medium uppercase tracking-[0.16em]"
+          style={{ color: MUTED }}>
+          AI Market Score
         </span>
-        <div className="flex items-baseline gap-2">
-          <span className="text-lg font-mono font-bold" style={{ color: "#FFFFFF" }}>
-            {score !== null && animated !== null ? Math.round(animated) : "--"}
+        <div className="flex items-baseline gap-1">
+          <span className="text-[22px] font-mono font-bold" style={{ color: "#FFFFFF" }}>
+            {animated !== null ? Math.round(animated) : "--"}
           </span>
-          <span className="text-[10px]" style={{ color: "#334155" }}>/100</span>
-          <span className="text-[11px] font-semibold" style={{ color: meta.color }}>
-            {meta.label}
-          </span>
+          <span className="text-[11px] font-mono" style={{ color: "#334155" }}>/100</span>
         </div>
       </div>
-
-      {/* Progress bar */}
-      <div className="w-full h-[3px] rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
+      <div className="w-full h-[3px] rounded-full overflow-hidden"
+        style={{ background: "rgba(255,255,255,0.06)" }}>
         <div
           className="h-full rounded-full transition-all duration-1000"
-          style={{
-            width:      `${s}%`,
-            background: meta.color,
-            boxShadow:  `0 0 10px ${meta.color}50`,
-          }}
+          style={{ width: `${score}%`, background: color, boxShadow: `0 0 8px ${color}55` }}
         />
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Compact metric (no card — just text in a grid)
-// ─────────────────────────────────────────────────────────────────────────────
-
-function Metric({
-  label,
-  value,
-  color,
-  note,
+// ── Bottom KPI item ───────────────────────────────────────────────────────────
+function KpiItem({
+  label, value, color, sub,
 }: {
   label: string;
   value: React.ReactNode;
   color?: string;
-  note?:  string;
+  sub?:   string;
 }) {
   return (
-    <div className="flex flex-col gap-[3px]">
-      <div className="text-[10px] font-medium uppercase tracking-[0.12em]"
-        style={{ color: "#475569" }}>
+    <div className="flex flex-col gap-[3px] min-w-[72px]">
+      <div className="text-[9px] font-medium uppercase tracking-[0.14em]"
+        style={{ color: "#334155" }}>
         {label}
       </div>
-      <div className="text-sm sm:text-[15px] font-mono font-semibold tabular-nums leading-tight"
+      <div className="text-[12px] font-mono font-semibold tabular-nums leading-tight"
         style={{ color: color ?? "#FFFFFF" }}>
         {value}
       </div>
-      {note && (
-        <div className="text-[10px] font-mono" style={{ color: "#334155" }}>{note}</div>
+      {sub && (
+        <div className="text-[9px] font-mono" style={{ color: "#1E293B" }}>{sub}</div>
       )}
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Loading skeleton
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Separator ─────────────────────────────────────────────────────────────────
+function Sep() {
+  return (
+    <div className="flex-shrink-0"
+      style={{ width: 1, height: 28, background: "rgba(255,255,255,0.05)" }} />
+  );
+}
 
+// ── Skeleton ──────────────────────────────────────────────────────────────────
 function Skeleton() {
-  const shimmer = "rounded-md animate-pulse";
   const bg0 = "rgba(255,255,255,0.04)";
   const bg1 = "rgba(255,255,255,0.07)";
+  const s = "rounded animate-pulse";
 
   return (
-    <div className="space-y-9">
-      {/* KPIs */}
-      <div className="grid grid-cols-3 gap-8">
-        {[1, 0, 0].map((withChart, i) => (
-          <div key={i} className="space-y-2.5">
-            <div className={shimmer} style={{ height: 8, width: 48, background: bg0 }} />
-            <div className={shimmer} style={{ height: 28, width: 120, background: bg1 }} />
-            <div className={shimmer} style={{ height: 10, width: 88, background: bg0 }} />
-            {withChart === 1 && (
-              <div className={shimmer} style={{ height: 28, width: "100%", background: bg0, marginTop: 10 }} />
-            )}
+    <div>
+      <div className="grid grid-cols-1 md:grid-cols-[45fr_55fr]">
+        {/* Left */}
+        <div className="p-8 space-y-6">
+          <div className="flex items-center gap-3">
+            <div className={s} style={{ width: 32, height: 32, borderRadius: 10, background: bg0 }} />
+            <div className={s} style={{ height: 10, width: 140, background: bg0 }} />
           </div>
-        ))}
-      </div>
-
-      {/* Divider */}
-      <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }} />
-
-      {/* Health */}
-      <div className="space-y-3">
-        <div className="flex justify-between items-center">
-          <div className={shimmer} style={{ height: 8, width: 120, background: bg0 }} />
-          <div className={shimmer} style={{ height: 18, width: 80, background: bg1 }} />
+          <div className="space-y-2.5">
+            {[1,.9,.85,.7].map((w, i) => (
+              <div key={i} className={s} style={{ height: 11, width: `${w * 100}%`, background: bg0 }} />
+            ))}
+          </div>
+          <div className={s} style={{ height: 3, background: bg0 }} />
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <div className={s} style={{ height: 9, width: 80, background: bg0 }} />
+              <div className={s} style={{ height: 20, width: 48, background: bg1 }} />
+            </div>
+            <div className={s} style={{ height: 3, background: bg0 }} />
+          </div>
+          <div className={s} style={{ height: 3, background: bg0 }} />
+          <div className="grid grid-cols-2 gap-4">
+            {[0,1].map(i => (
+              <div key={i} className="space-y-1.5">
+                <div className={s} style={{ height: 8, width: 48, background: bg0 }} />
+                <div className={s} style={{ height: 14, width: 64, background: bg1 }} />
+              </div>
+            ))}
+            <div className="col-span-2 space-y-1.5">
+              <div className={s} style={{ height: 8, width: 72, background: bg0 }} />
+              <div className={s} style={{ height: 11, background: bg0 }} />
+              <div className={s} style={{ height: 11, width: "80%", background: bg0 }} />
+            </div>
+          </div>
         </div>
-        <div className={shimmer} style={{ height: 3, width: "100%", background: bg0 }} />
-      </div>
-
-      {/* Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
-        {[0,1,2,3].map(i => (
-          <div key={i} className="space-y-2">
-            <div className={shimmer} style={{ height: 8, width: 64, background: bg0 }} />
-            <div className={shimmer} style={{ height: 16, width: 80, background: bg1 }} />
+        {/* Right */}
+        <div className="p-8 space-y-5">
+          <div className="flex justify-between items-start">
+            <div className="space-y-2">
+              <div className={s} style={{ height: 9, width: 60, background: bg0 }} />
+              <div className={s} style={{ height: 32, width: 140, background: bg1 }} />
+            </div>
+            <div className={s} style={{ height: 24, width: 72, background: bg0 }} />
           </div>
-        ))}
+          <div className={s} style={{ height: 220, borderRadius: 8, background: bg0 }} />
+          <div className="flex justify-between">
+            <div className={s} style={{ height: 8, width: 48, background: bg0 }} />
+            <div className={s} style={{ height: 8, width: 40, background: bg0 }} />
+          </div>
+        </div>
       </div>
-
-      {/* Wide chart */}
-      <div style={{ borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: 24 }}>
-        <div className={shimmer} style={{ height: 72, width: "100%", background: bg0, borderRadius: 10 }} />
+      {/* Bottom */}
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+        <div className="flex gap-8 px-8 py-5">
+          {[0,1,2,3,4,5].map(i => (
+            <div key={i} className="space-y-1.5 min-w-[72px]">
+              <div className={s} style={{ height: 8, width: 44, background: bg0 }} />
+              <div className={s} style={{ height: 14, width: 64, background: bg1 }} />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Main component
-// ─────────────────────────────────────────────────────────────────────────────
-
+// ── Main component ────────────────────────────────────────────────────────────
 export function MarketOverview() {
-  const [data,       setData]       = useState<MarketData | null>(null);
-  const [loading,    setLoading]    = useState(true);
-  const [lastFetch,  setLastFetch]  = useState<Date | null>(null);
-  const [visible,    setVisible]    = useState(false);
+  const [data,      setData]      = useState<MarketData | null>(null);
+  const [loading,   setLoading]   = useState(true);
+  const [lastFetch, setLastFetch] = useState<Date | null>(null);
+  const [visible,   setVisible]   = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const res = await fetch("/api/market", { cache: "no-store" });
       if (res.ok) {
@@ -385,156 +473,270 @@ export function MarketOverview() {
           setLastFetch(new Date());
         }
       }
-    } catch { /* keep stale data */ } finally {
+    } catch { /* keep stale */ } finally {
       setLoading(false);
       requestAnimationFrame(() => setVisible(true));
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-    const id = setInterval(load, 20_000); // every 20s
+    const id = setInterval(load, 20_000);
     return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [load]);
 
-  // Derived values
-  const sl        = data?.sparklines;
-  const vnIdx     = data?.vnindex;
-  const vnIdxClr  = indexColor(vnIdx?.change);
-  const hose      = data?.hose;
-  const breadthTot = hose ? hose.advance + hose.decline + hose.unchanged : 0;
+  // Derived
+  const insights   = data ? deriveInsights(data) : null;
+  const sl         = data?.sparklines;
+  const vnIdx      = data?.vnindex;
+  const chartColor = vnIdx ? priceColor(vnIdx.change) : POS;
 
-  const ff        = data?.foreignFlow;
-  const ffColor   = ff == null ? MUTED : ff >= 0 ? POS : NEG;
-  const ffStr     = ff == null
+  const ff       = data?.foreignFlow;
+  const ffColor  = ff == null ? MUTED : ff >= 0 ? POS : NEG;
+  const ffStr    = ff == null
     ? "--"
     : `${ff >= 0 ? "+" : ""}${Math.abs(ff).toLocaleString("vi-VN", { maximumFractionDigits: 0 })} tỷ`;
 
-  // Breadth display
-  const breadthNode = hose ? (
-    <span>
-      <span style={{ color: POS }}>+{hose.advance}</span>
-      <span style={{ color: "#334155" }}> / {hose.unchanged} / </span>
-      <span style={{ color: NEG }}>−{hose.decline}</span>
-    </span>
-  ) : "--";
-
-  const breadthNote = breadthTot > 0
-    ? `${Math.round((hose!.advance / breadthTot) * 100)}% tăng giá`
-    : undefined;
+  const hose         = data?.hose;
+  const breadthTotal = hose ? hose.advance + hose.decline + hose.unchanged : 0;
 
   return (
     <div
       className={cn(
-        "w-full max-w-4xl mx-auto transition-all duration-700",
-        visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3",
+        "w-full max-w-5xl mx-auto transition-all duration-700",
+        visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4",
       )}
     >
       <div
-        className="rounded-[28px] border px-7 py-6 sm:px-10 sm:py-8"
+        className="rounded-[28px] border overflow-hidden"
         style={{
-          background:   "rgba(11,16,21,0.94)",
-          borderColor:  "rgba(126,255,74,0.14)",
-          backdropFilter: "blur(28px)",
+          background:     "rgba(9,13,20,0.96)",
+          borderColor:    "rgba(126,255,74,0.11)",
+          backdropFilter: "blur(32px)",
+          boxShadow:      "0 0 80px rgba(126,255,74,0.04), inset 0 1px 0 rgba(255,255,255,0.04)",
         }}
       >
-        {/* ── Header ───────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between mb-8">
-          <span
-            className="text-[10px] font-semibold uppercase tracking-[0.2em]"
-            style={{ color: "#64748B" }}
-          >
-            Tổng quan thị trường
-          </span>
-          <LiveBadge lastFetch={lastFetch} />
-        </div>
-
         {loading ? <Skeleton /> : (
-          <div className="space-y-8">
+          <>
+            {/* ── Two-column section ─────────────────────────────────────── */}
+            <div className="grid grid-cols-1 md:grid-cols-[45fr_55fr]">
 
-            {/* ── Row 1: Three KPIs ─────────────────────────────────────── */}
-            <div className="grid grid-cols-3 gap-6 sm:gap-10">
-              {/* VN-Index — primary focus, with mini sparkline */}
-              <IndexKPI
-                label="VN-Index"
-                data={vnIdx ?? null}
-                sparkline={sl?.vnindex}
-              />
-              {/* VN30 — numbers only */}
-              <IndexKPI
-                label="VN30"
-                data={data?.vn30 ?? null}
-              />
-              {/* HNX-Index — numbers only */}
-              <IndexKPI
-                label="HNX-Index"
-                data={data?.hnx ?? null}
-              />
+              {/* ── LEFT: AI Summary ──────────────────────────────────────── */}
+              <div
+                className="flex flex-col gap-6 p-7 sm:p-9"
+                style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+              >
+                {/* Header */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center gap-3">
+                    {/* AI icon */}
+                    <div
+                      className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{
+                        background: "rgba(124,255,74,0.09)",
+                        border:     "1px solid rgba(124,255,74,0.16)",
+                      }}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path
+                          d="M8 1.5L9.8 6.2L14.5 8L9.8 9.8L8 14.5L6.2 9.8L1.5 8L6.2 6.2L8 1.5Z"
+                          fill="#7CFF4A" opacity="0.92"
+                        />
+                      </svg>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.2em]"
+                        style={{ color: "#94A3B8" }}>
+                        AI ĐÁNH GIÁ THỊ TRƯỜNG
+                      </div>
+                      <LiveBadge lastFetch={lastFetch} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bullets */}
+                {insights && insights.bullets.length > 0 && (
+                  <div className="space-y-2.5">
+                    {insights.bullets.map((b, i) => (
+                      <div key={i} className="flex gap-2.5 items-start">
+                        <span className="text-[10px] mt-[3px] flex-shrink-0" style={{ color: POS, opacity: 0.7 }}>•</span>
+                        <span className="text-[13px] leading-relaxed" style={{ color: "#94A3B8" }}>{b}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Score */}
+                {insights && (
+                  <>
+                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }} />
+                    <ScoreBar score={insights.score} />
+                  </>
+                )}
+
+                {/* Risk / Sentiment / Recommendation */}
+                {insights && (
+                  <>
+                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }} />
+                    <div className="grid grid-cols-2 gap-x-5 gap-y-4">
+                      <div className="space-y-1">
+                        <div className="text-[9px] font-medium uppercase tracking-[0.16em]"
+                          style={{ color: "#334155" }}>Rủi ro</div>
+                        <div className="text-[13px] font-semibold" style={{ color: insights.riskColor }}>
+                          {insights.risk}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-[9px] font-medium uppercase tracking-[0.16em]"
+                          style={{ color: "#334155" }}>Tâm lý</div>
+                        <div className="text-[13px] font-semibold" style={{ color: insights.sentimentColor }}>
+                          {insights.sentiment}
+                        </div>
+                      </div>
+                      <div className="col-span-2 space-y-1.5">
+                        <div className="text-[9px] font-medium uppercase tracking-[0.16em]"
+                          style={{ color: "#334155" }}>Khuyến nghị</div>
+                        {insights.recommendation.map((r, i) => (
+                          <div key={i} className="text-[12px] leading-snug"
+                            style={{ color: "#64748B" }}>{r}</div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* ── RIGHT: Chart ──────────────────────────────────────────── */}
+              <div
+                className="flex flex-col gap-5 p-7 sm:p-9"
+                style={{
+                  borderLeft:   "1px solid rgba(255,255,255,0.04)",
+                  borderBottom: "1px solid rgba(255,255,255,0.04)",
+                }}
+              >
+                {/* Chart header */}
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <div className="text-[9px] font-medium uppercase tracking-[0.18em]"
+                      style={{ color: "#334155" }}>
+                      VN-Index · 27 ngày
+                    </div>
+                    {vnIdx && (
+                      <div className="text-[28px] sm:text-[32px] font-mono font-bold leading-none"
+                        style={{ color: "#FFFFFF" }}>
+                        {vnIdx.value.toLocaleString("vi-VN", {
+                          minimumFractionDigits: 2, maximumFractionDigits: 2,
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  {vnIdx && (
+                    <div className="flex flex-col items-end gap-1.5 pt-1">
+                      <span className="text-[15px] font-mono font-semibold tabular-nums"
+                        style={{ color: chartColor }}>
+                        {vnIdx.change >= 0 ? "+" : ""}{vnIdx.change.toFixed(2)}
+                      </span>
+                      <span
+                        className="text-[11px] font-mono font-semibold px-2.5 py-0.5 rounded-full tabular-nums"
+                        style={{
+                          color:      chartColor,
+                          background: `${chartColor}18`,
+                          border:     `1px solid ${chartColor}22`,
+                        }}
+                      >
+                        {vnIdx.change_pct >= 0 ? "+" : ""}{vnIdx.change_pct.toFixed(2)}%
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Chart container */}
+                <div className="relative flex-1" style={{ minHeight: 220 }}>
+                  {sl?.vnindex && sl.vnindex.length >= 2 ? (
+                    <PremiumChart data={sl.vnindex} color={chartColor} />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-sm"
+                      style={{ color: MUTED }}>
+                      Không có dữ liệu biểu đồ
+                    </div>
+                  )}
+                </div>
+
+                {/* X-axis time labels */}
+                <div className="flex justify-between text-[9px] font-mono"
+                  style={{ color: "#1E293B" }}>
+                  <span>−27 ngày</span>
+                  <span>Hôm nay</span>
+                </div>
+              </div>
             </div>
 
-            {/* ── Divider ───────────────────────────────────────────────── */}
-            <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }} />
-
-            {/* ── Row 2: Market Health Score ────────────────────────────── */}
-            <HealthScore score={data?.healthScore ?? null} />
-
-            {/* ── Row 3: Four compact metrics ───────────────────────────── */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-5">
-              <Metric
+            {/* ── BOTTOM KPI ROW ─────────────────────────────────────────── */}
+            <div
+              className="flex items-center gap-5 sm:gap-8 px-7 sm:px-9 py-5 overflow-x-auto"
+              style={{ scrollbarWidth: "none" }}
+            >
+              <KpiItem
+                label="VN-Index"
+                value={vnIdx
+                  ? vnIdx.value.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                  : "--"}
+                color={vnIdx ? priceColor(vnIdx.change) : MUTED}
+                sub={vnIdx ? `${vnIdx.change >= 0 ? "+" : ""}${vnIdx.change_pct.toFixed(2)}%` : undefined}
+              />
+              <Sep />
+              <KpiItem
+                label="VN30"
+                value={data?.vn30
+                  ? data.vn30.value.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                  : "--"}
+                color={data?.vn30 ? priceColor(data.vn30.change) : MUTED}
+                sub={data?.vn30 ? `${data.vn30.change >= 0 ? "+" : ""}${data.vn30.change_pct.toFixed(2)}%` : undefined}
+              />
+              <Sep />
+              <KpiItem
+                label="HNX-Index"
+                value={data?.hnx
+                  ? data.hnx.value.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                  : "--"}
+                color={data?.hnx ? priceColor(data.hnx.change) : MUTED}
+                sub={data?.hnx ? `${data.hnx.change >= 0 ? "+" : ""}${data.hnx.change_pct.toFixed(2)}%` : undefined}
+              />
+              <Sep />
+              <KpiItem
                 label="Thanh khoản"
                 value={data?.liquidity != null
                   ? `${data.liquidity.toLocaleString("vi-VN", { maximumFractionDigits: 0 })} tỷ`
                   : "--"}
-                note="VND · HOSE"
+                sub="HOSE"
               />
-              <Metric
-                label="Khối lượng"
-                value={data?.volume != null
-                  ? `${data.volume.toLocaleString("vi-VN", { maximumFractionDigits: 1 })} tr`
-                  : "--"}
-                note="Triệu CP · HOSE"
-              />
-              <Metric
-                label="Độ rộng TT"
-                value={breadthNode}
-                note={breadthNote}
-              />
-              <Metric
+              <Sep />
+              <KpiItem
                 label="NN Ròng"
                 value={ffStr}
                 color={ffColor}
-                note={ff != null ? "Tỷ VND" : undefined}
+                sub={ff !== null ? "Tỷ VND" : undefined}
+              />
+              <Sep />
+              <KpiItem
+                label="Độ rộng"
+                value={
+                  hose ? (
+                    <span>
+                      <span style={{ color: POS }}>+{hose.advance}</span>
+                      <span style={{ color: "#1E293B" }}> / </span>
+                      <span style={{ color: NEG }}>−{hose.decline}</span>
+                    </span>
+                  ) : "--"
+                }
+                sub={
+                  breadthTotal > 0
+                    ? `${Math.round((hose!.advance / breadthTotal) * 100)}% tăng giá`
+                    : undefined
+                }
               />
             </div>
-
-            {/* ── Bottom: Full-width VNIndex sparkline ──────────────────── */}
-            {sl?.vnindex && sl.vnindex.length >= 2 && (
-              <div style={{ borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: 24 }}>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[10px] uppercase tracking-[0.14em]"
-                    style={{ color: "#334155" }}>
-                    VN-Index · 27 ngày
-                  </span>
-                  {vnIdx && (
-                    <span className="text-[10px] font-mono tabular-nums"
-                      style={{ color: vnIdxClr }}>
-                      {(vnIdx.change >= 0 ? "+" : "")}{vnIdx.change.toFixed(2)}
-                      {"  "}
-                      {(vnIdx.change_pct >= 0 ? "+" : "")}{vnIdx.change_pct.toFixed(2)}%
-                    </span>
-                  )}
-                </div>
-                <Sparkline
-                  data={sl.vnindex}
-                  color={vnIdxClr}
-                  height={72}
-                  stroke={1.8}
-                />
-              </div>
-            )}
-
-          </div>
+          </>
         )}
       </div>
     </div>
