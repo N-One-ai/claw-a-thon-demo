@@ -30,7 +30,6 @@ function priceColor(v?: number | null) { return (v ?? 0) >= 0 ? POS : NEG; }
 
 // ── AI Insights (derived client-side from market data) ────────────────────────
 interface Insights {
-  bullets:           string[];
   score:             number;
   risk:              string;
   riskColor:         string;
@@ -40,55 +39,12 @@ interface Insights {
 }
 
 function deriveInsights(d: MarketData): Insights {
-  const score  = d.healthScore ?? 50;
-  const vnIdx  = d.vnindex;
-  const hose   = d.hose;
-  const ff     = d.foreignFlow;
-  const liq    = d.liquidity;
-  const sl     = d.sparklines?.vnindex ?? [];
-  const bullets: string[] = [];
+  const score = d.healthScore ?? 50;
 
-  // Trend bullet
-  if (vnIdx) {
-    if (sl.length >= 10) {
-      const ra = sl.slice(-5).reduce((s, v) => s + v, 0) / 5;
-      const oa = sl.slice(-10, -5).reduce((s, v) => s + v, 0) / 5;
-      if      (ra > oa * 1.01) bullets.push("VN-Index duy trì xu hướng tăng trung hạn.");
-      else if (ra < oa * 0.99) bullets.push("VN-Index đang trong giai đoạn điều chỉnh ngắn hạn.");
-      else                      bullets.push("VN-Index đang tích lũy trong biên độ hẹp.");
-    } else {
-      const dir = vnIdx.change >= 0 ? "tăng" : "giảm";
-      bullets.push(`VN-Index ${dir} ${Math.abs(vnIdx.change_pct).toFixed(2)}% trong phiên gần nhất.`);
-    }
-  }
-
-  // Liquidity bullet
-  if (liq !== null) {
-    if      (liq >= 15000) bullets.push("Thanh khoản rất cao — dòng tiền tham gia tích cực.");
-    else if (liq >= 8000)  bullets.push("Thanh khoản duy trì trên mức trung bình 20 phiên.");
-    else                    bullets.push("Thanh khoản thấp — dòng tiền đang thận trọng.");
-  }
-
-  // Foreign flow bullet
-  if (ff !== null) {
-    if      (ff >  100) bullets.push("Khối ngoại mua ròng — tín hiệu tích cực từ dòng tiền nước ngoài.");
-    else if (ff < -100) bullets.push("Khối ngoại bán ròng — áp lực từ dòng tiền nước ngoài.");
-    else                 bullets.push("Khối ngoại giao dịch cân bằng trong phiên.");
-  }
-
-  // Breadth bullet
-  if (hose) {
-    const total = hose.advance + hose.decline + hose.unchanged;
-    const pct   = total > 0 ? (hose.advance / total) * 100 : 50;
-    if      (pct >= 55) bullets.push("Độ rộng thị trường tích cực — đa số cổ phiếu tăng giá.");
-    else if (pct <= 35) bullets.push("Áp lực bán lan rộng — chưa có tín hiệu phục hồi rõ ràng.");
-    else                 bullets.push("Chưa xuất hiện tín hiệu đảo chiều đáng kể.");
-  }
-
-  const risk          = score >= 65 ? "Thấp"    : score < 40 ? "Cao"       : "Trung bình";
-  const riskColor     = score >= 65 ? POS        : score < 40 ? NEG         : WARN;
-  const sentiment     = score >= 60 ? "Tích cực" : score < 40 ? "Tiêu cực" : "Trung lập";
-  const sentimentColor = score >= 60 ? POS       : score < 40 ? NEG         : MUTED;
+  const risk           = score >= 65 ? "Thấp"    : score < 40 ? "Cao"       : "Trung bình";
+  const riskColor      = score >= 65 ? POS        : score < 40 ? NEG         : WARN;
+  const sentiment      = score >= 60 ? "Tích cực" : score < 40 ? "Tiêu cực" : "Trung lập";
+  const sentimentColor = score >= 60 ? POS        : score < 40 ? NEG         : MUTED;
 
   const recommendation = score >= 65
     ? ["Tiếp tục nắm giữ doanh nghiệp chất lượng.", "Tích lũy từng phần ở vùng giá hợp lý."]
@@ -96,10 +52,7 @@ function deriveInsights(d: MarketData): Insights {
     ? ["Duy trì danh mục hiện tại, thận trọng với vị thế mới.", "Ưu tiên cổ phiếu cơ bản tốt, thanh khoản cao."]
     : ["Giảm tỷ trọng rủi ro, nâng tỷ lệ tiền mặt.", "Chờ tín hiệu xác nhận trước khi mua thêm."];
 
-  return {
-    bullets: bullets.slice(0, 4),
-    score, risk, riskColor, sentiment, sentimentColor, recommendation,
-  };
+  return { score, risk, riskColor, sentiment, sentimentColor, recommendation };
 }
 
 // ── useCountUp ────────────────────────────────────────────────────────────────
@@ -523,56 +476,36 @@ export function MarketOverview() {
 
               {/* ── LEFT: AI Summary ──────────────────────────────────────── */}
               <div
-                className="flex flex-col gap-6 p-7 sm:p-9"
+                className="flex flex-col gap-5 p-6 sm:p-7"
                 style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
               >
                 {/* Header */}
-                <div className="space-y-2.5">
-                  <div className="flex items-center gap-3">
-                    {/* AI icon */}
-                    <div
-                      className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{
-                        background: "rgba(124,255,74,0.09)",
-                        border:     "1px solid rgba(124,255,74,0.16)",
-                      }}
-                    >
-                      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                        <path
-                          d="M8 1.5L9.8 6.2L14.5 8L9.8 9.8L8 14.5L6.2 9.8L1.5 8L6.2 6.2L8 1.5Z"
-                          fill="#7CFF4A" opacity="0.92"
-                        />
-                      </svg>
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{
+                      background: "rgba(124,255,74,0.09)",
+                      border:     "1px solid rgba(124,255,74,0.16)",
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path
+                        d="M8 1.5L9.8 6.2L14.5 8L9.8 9.8L8 14.5L6.2 9.8L1.5 8L6.2 6.2L8 1.5Z"
+                        fill="#7CFF4A" opacity="0.92"
+                      />
+                    </svg>
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.2em]"
+                      style={{ color: "#94A3B8" }}>
+                      AI ĐÁNH GIÁ THỊ TRƯỜNG
                     </div>
-                    <div className="space-y-1">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.2em]"
-                        style={{ color: "#94A3B8" }}>
-                        AI ĐÁNH GIÁ THỊ TRƯỜNG
-                      </div>
-                      <LiveBadge lastFetch={lastFetch} />
-                    </div>
+                    <LiveBadge lastFetch={lastFetch} />
                   </div>
                 </div>
 
-                {/* Bullets */}
-                {insights && insights.bullets.length > 0 && (
-                  <div className="space-y-2.5">
-                    {insights.bullets.map((b, i) => (
-                      <div key={i} className="flex gap-2.5 items-start">
-                        <span className="text-[10px] mt-[3px] flex-shrink-0" style={{ color: POS, opacity: 0.7 }}>•</span>
-                        <span className="text-[13px] leading-relaxed" style={{ color: "#94A3B8" }}>{b}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
                 {/* Score */}
-                {insights && (
-                  <>
-                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }} />
-                    <ScoreBar score={insights.score} />
-                  </>
-                )}
+                {insights && <ScoreBar score={insights.score} />}
 
                 {/* Risk / Sentiment / Recommendation */}
                 {insights && (
@@ -608,7 +541,7 @@ export function MarketOverview() {
 
               {/* ── RIGHT: Chart ──────────────────────────────────────────── */}
               <div
-                className="flex flex-col gap-5 p-7 sm:p-9"
+                className="flex flex-col gap-4 p-6 sm:p-7"
                 style={{
                   borderLeft:   "1px solid rgba(255,255,255,0.04)",
                   borderBottom: "1px solid rgba(255,255,255,0.04)",
@@ -651,7 +584,7 @@ export function MarketOverview() {
                 </div>
 
                 {/* Chart container */}
-                <div className="relative flex-1" style={{ minHeight: 220 }}>
+                <div className="relative flex-1" style={{ minHeight: 160 }}>
                   {sl?.vnindex && sl.vnindex.length >= 2 ? (
                     <PremiumChart data={sl.vnindex} color={chartColor} />
                   ) : (
@@ -673,7 +606,7 @@ export function MarketOverview() {
 
             {/* ── BOTTOM KPI ROW ─────────────────────────────────────────── */}
             <div
-              className="flex items-center gap-5 sm:gap-8 px-7 sm:px-9 py-5 overflow-x-auto"
+              className="flex items-center gap-5 sm:gap-8 px-6 sm:px-7 py-4 overflow-x-auto"
               style={{ scrollbarWidth: "none" }}
             >
               <KpiItem
