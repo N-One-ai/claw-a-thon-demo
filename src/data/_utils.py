@@ -18,6 +18,37 @@ logger = logging.getLogger(__name__)
 F = TypeVar("F", bound=Callable[..., Any])
 
 # ------------------------------------------------------------------ #
+# vnstock / vnai safety guard                                          #
+# ------------------------------------------------------------------ #
+#
+# vnai.beam.quota.CleanErrorContext.__exit__ calls sys.exit() when the
+# per-minute API quota is exceeded.  sys.exit() raises SystemExit which
+# is a BaseException, NOT Exception — so every plain "except Exception"
+# block misses it and the whole uvicorn process is killed.
+#
+# Wrap every vnstock API call with this context manager so SystemExit
+# is caught and converted to RuntimeError, which our normal handlers
+# can handle gracefully without crashing the server.
+
+from contextlib import contextmanager
+
+@contextmanager
+def vnstock_call(label: str = "vnstock"):
+    """
+    Context manager that converts vnai's sys.exit() (rate-limit kill)
+    into a RuntimeError so it never crashes the server process.
+
+    Usage:
+        with vnstock_call("quote.history"):
+            df = stock.quote.history(...)
+    """
+    try:
+        yield
+    except SystemExit as exc:
+        raise RuntimeError(f"[{label}] vnai rate-limit killed process: {exc}") from None
+
+
+# ------------------------------------------------------------------ #
 # Retry decorator                                                       #
 # ------------------------------------------------------------------ #
 

@@ -6,6 +6,7 @@ from typing import Optional
 
 import pandas as pd
 
+from ._utils import vnstock_call
 from .cache import CacheManager
 from .models import (
     OHLCV,
@@ -131,7 +132,8 @@ class VnstockClient:
         row: dict = {}
 
         try:
-            overview = stock.company.overview()
+            with vnstock_call("company.overview"):
+                overview = stock.company.overview()
             if hasattr(overview, "iloc") and len(overview):
                 row = overview.iloc[0].to_dict()
         except Exception as exc:
@@ -183,11 +185,12 @@ class VnstockClient:
 
         stock = self._stock(ticker)
         try:
-            df = stock.quote.history(
-                start=start.strftime("%Y-%m-%d"),
-                end=end.strftime("%Y-%m-%d"),
-                interval="1D",
-            )
+            with vnstock_call("quote.history"):
+                df = stock.quote.history(
+                    start=start.strftime("%Y-%m-%d"),
+                    end=end.strftime("%Y-%m-%d"),
+                    interval="1D",
+                )
         except Exception as exc:
             logger.error("Lỗi lấy giá %s: %s", ticker, exc)
             return PriceHistory(ticker=ticker, candles=[])
@@ -206,7 +209,8 @@ class VnstockClient:
         # Thử lấy từ overview trước (đã ở đơn vị VND đầy đủ)
         try:
             stock = self._stock(ticker)
-            overview = stock.company.overview()
+            with vnstock_call("company.overview/price"):
+                overview = stock.company.overview()
             if hasattr(overview, "iloc") and len(overview):
                 price_raw = overview.iloc[0].get("current_price")
                 if price_raw and float(price_raw) > 0:
@@ -243,25 +247,29 @@ class VnstockClient:
         statements = FinancialStatements(ticker=ticker)
 
         try:
-            df = stock.finance.income_statement(period=period, lang="vi")
+            with vnstock_call("finance.income_statement"):
+                df = stock.finance.income_statement(period=period, lang="vi")
             statements.income_statements = self._parse_income(df, n_periods)
         except Exception as exc:
             logger.warning("Không lấy được income statement %s: %s", ticker, exc)
 
         try:
-            df = stock.finance.balance_sheet(period=period, lang="vi")
+            with vnstock_call("finance.balance_sheet"):
+                df = stock.finance.balance_sheet(period=period, lang="vi")
             statements.balance_sheets = self._parse_balance(df, n_periods, ticker)
         except Exception as exc:
             logger.warning("Không lấy được balance sheet %s: %s", ticker, exc)
 
         try:
-            df = stock.finance.cash_flow(period=period, lang="vi")
+            with vnstock_call("finance.cash_flow"):
+                df = stock.finance.cash_flow(period=period, lang="vi")
             statements.cash_flow_statements = self._parse_cashflow(df, n_periods)
         except Exception as exc:
             logger.warning("Không lấy được cash flow %s: %s", ticker, exc)
 
         try:
-            df = stock.finance.ratio(period=period, lang="vi")
+            with vnstock_call("finance.ratio"):
+                df = stock.finance.ratio(period=period, lang="vi")
             statements.ratios = self._parse_ratios(df, n_periods)
         except Exception as exc:
             logger.warning("Không lấy được ratios %s: %s", ticker, exc)
@@ -285,12 +293,12 @@ class VnstockClient:
         try:
             # VCI hỗ trợ VNINDEX; giá trị là điểm số (không nhân 1000)
             index_stock = self._get_vn().stock(symbol=index_symbol, source="VCI")
-            df = index_stock.quote.history(
-                start=start.strftime("%Y-%m-%d"),
-                end=end.strftime("%Y-%m-%d"),
-                interval="1D",
-            )
-            # TCBS index prices đã ở điểm số (không cần nhân 1000)
+            with vnstock_call(f"index.history/{index_symbol}"):
+                df = index_stock.quote.history(
+                    start=start.strftime("%Y-%m-%d"),
+                    end=end.strftime("%Y-%m-%d"),
+                    interval="1D",
+                )
             candles = self._df_to_candles(df, price_scale=1.0)
         except Exception as exc:
             logger.error("Lỗi lấy chỉ số %s: %s", index_symbol, exc)

@@ -22,6 +22,7 @@ import os
 from datetime import date, timedelta
 from typing import Optional
 
+from ._utils import vnstock_call
 from .cache import CacheManager
 
 logger = logging.getLogger(__name__)
@@ -167,7 +168,8 @@ class MarketOverviewFetcher:
         q     = Quote(symbol=symbol, source="VCI")
         start = (date.today() - timedelta(days=10)).strftime("%Y-%m-%d")
         end   = date.today().strftime("%Y-%m-%d")
-        df    = q.history(start=start, end=end, interval="1D")
+        with vnstock_call(f"Quote.history/{symbol}"):
+            df = q.history(start=start, end=end, interval="1D")
 
         if df is None or df.empty or len(df) < 2:
             return None
@@ -188,8 +190,9 @@ class MarketOverviewFetcher:
         """Gọi Trading.price_board() và flatten multi-level columns."""
         from vnstock.api.trading import Trading
 
-        t  = Trading(source="VCI")
-        df = t.price_board(symbols_list=symbols)
+        t = Trading(source="VCI")
+        with vnstock_call("Trading.price_board"):
+            df = t.price_board(symbols_list=symbols)
         if df is None or df.empty:
             return None
         df.columns = ["_".join(str(c) for c in col) for col in df.columns.values]
