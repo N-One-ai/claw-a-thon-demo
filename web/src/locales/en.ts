@@ -39,7 +39,7 @@ export const en: Translations = {
     badge: "AI Investment Analysis • HOSE & HNX Data • Live Updates",
     titleWhite: "Vietnam Stock",
     titleGradient: "Analysis AI",
-    subtitle: "Vietnam stock analysis powered by AI.",
+    subtitle: "AI partner for medium and long-term investors.",
     subtitleHighlight: "Smart Valuation • Risk Analysis • AI Investment Reports",
     placeholder: "Enter ticker symbol: FPT, VCB, HPG...",
     analyzeBtn: "Analyze Now",
