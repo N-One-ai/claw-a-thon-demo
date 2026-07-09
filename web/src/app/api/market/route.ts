@@ -18,6 +18,15 @@ const VCI_HEADERS: Record<string, string> = {
   "Origin": "https://trading.vietcap.com.vn/",
 };
 
+// ── VPS data feed (works from Node.js — used for index OHLC) ─────────────────
+const VPS_FEED = "https://histdatafeed.vps.com.vn/tradingview/history";
+const VPS_HEADERS: Record<string, string> = {
+  "Accept": "application/json",
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+  "Referer": "https://www.vps.com.vn/",
+};
+
 // VN30 + mid-cap sample for HOSE breadth / liquidity / volume
 const HOSE_SAMPLE = [
   "ACB","BCM","BID","BVH","CTG","FPT","GAS","GVR","HDB","HPG",
@@ -41,52 +50,38 @@ export const dynamic = "force-dynamic";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * VCI chart API requires `to` = next midnight Vietnam time (UTC+7) in seconds.
- * That's the only timestamp that reliably returns today's bar.
- */
-function nextVnMidnightSec(): number {
-  const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
-  const vnNow = new Date(Date.now() + VN_OFFSET_MS);
-  vnNow.setUTCDate(vnNow.getUTCDate() + 1);
-  vnNow.setUTCHours(0, 0, 0, 0);
-  return Math.floor((vnNow.getTime() - VN_OFFSET_MS) / 1000);
-}
-
 interface IndexData {
   value: number;
   change: number;
   change_pct: number;
 }
 
-async function fetchIndexChart(): Promise<Record<string, IndexData | null>> {
-  const to = nextVnMidnightSec();
-  const res = await fetch(`${VCI_BASE}/chart/OHLCChart/gap-chart`, {
-    method: "POST",
-    headers: VCI_HEADERS,
-    body: JSON.stringify({
-      timeFrame: "ONE_DAY",
-      symbols: ["VNINDEX", "HNXIndex"],
-      to,
-      countBack: 5,
-    }),
-    signal: AbortSignal.timeout(8_000),
-  });
-  if (!res.ok) return {};
-  const data: any[] = await res.json();
-  if (!Array.isArray(data) || data.length === 0) return {};
+async function fetchOneIndex(vpsSymbol: string): Promise<IndexData | null> {
+  const now  = Math.floor(Date.now() / 1000);
+  const from = now - 86400 * 3; // 3 days back to ensure we get prev close
+  const url  = `${VPS_FEED}?symbol=${vpsSymbol}&resolution=D&from=${from}&to=${now + 86400}`;
+  const res  = await fetch(url, { headers: VPS_HEADERS, signal: AbortSignal.timeout(8_000) });
+  if (!res.ok) return null;
+  const data = await res.json();
+  if (data?.s !== "ok") return null;
+  const closes: number[] = data.c ?? [];
+  if (closes.length < 2) return null;
+  const value  = closes[closes.length - 1];
+  const prev   = closes[closes.length - 2];
+  const change = +(value - prev).toFixed(2);
+  const pct    = prev ? +(change / prev * 100).toFixed(2) : 0;
+  return { value: +value.toFixed(2), change, change_pct: pct };
+}
 
-  const result: Record<string, IndexData | null> = {};
-  for (const item of data) {
-    const closes: number[] = item.c ?? [];
-    if (closes.length < 2) { result[item.symbol] = null; continue; }
-    const value   = closes[closes.length - 1];
-    const prev    = closes[closes.length - 2];
-    const change  = +(value - prev).toFixed(2);
-    const pct     = prev ? +(change / prev * 100).toFixed(2) : 0;
-    result[item.symbol] = { value: +value.toFixed(2), change, change_pct: pct };
-  }
-  return result;
+async function fetchIndexData(): Promise<Record<string, IndexData | null>> {
+  const [vnRes, hnxRes] = await Promise.allSettled([
+    fetchOneIndex("VNINDEX"),
+    fetchOneIndex("HNXINDEX"),
+  ]);
+  return {
+    VNINDEX:  vnRes.status  === "fulfilled" ? vnRes.value  : null,
+    HNXIndex: hnxRes.status === "fulfilled" ? hnxRes.value : null,
+  };
 }
 
 async function fetchPriceBoard(symbols: string[]): Promise<any[]> {
@@ -132,16 +127,16 @@ function sumVolume(board: any[]): number {
 async function fetchFromVci() {
   const errors: string[] = [];
 
-  const [chartRes, hoseRes, hnxRes] = await Promise.allSettled([
-    fetchIndexChart(),
+  const [indexRes, hoseRes, hnxRes] = await Promise.allSettled([
+    fetchIndexData(),
     fetchPriceBoard(HOSE_SAMPLE),
     fetchPriceBoard(HNX_SAMPLE),
   ]);
 
   const chart: Record<string, IndexData | null> =
-    chartRes.status === "fulfilled" ? chartRes.value : {};
-  if (chartRes.status === "rejected")
-    errors.push(`index_chart: ${chartRes.reason}`);
+    indexRes.status === "fulfilled" ? indexRes.value : {};
+  if (indexRes.status === "rejected")
+    errors.push(`index_data: ${indexRes.reason}`);
 
   const hoseBoard: any[] = hoseRes.status === "fulfilled" ? hoseRes.value : [];
   if (hoseRes.status === "rejected")
