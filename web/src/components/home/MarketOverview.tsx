@@ -311,7 +311,7 @@ function KpiItem({
   sub?:   string;
 }) {
   return (
-    <div className="flex flex-col gap-[3px] min-w-[72px]">
+    <div className="flex flex-col items-center gap-[3px] text-center">
       <div className="text-[9px] font-medium uppercase tracking-[0.14em]"
         style={{ color: "#334155" }}>
         {label}
@@ -605,69 +605,74 @@ export function MarketOverview() {
             </div>
 
             {/* ── BOTTOM KPI ROW ─────────────────────────────────────────── */}
-            <div
-              className="flex items-center gap-5 sm:gap-8 px-6 sm:px-7 py-4 overflow-x-auto"
-              style={{ scrollbarWidth: "none" }}
-            >
-              <KpiItem
-                label="VN-Index"
-                value={vnIdx
-                  ? vnIdx.value.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                  : "--"}
-                color={vnIdx ? priceColor(vnIdx.change) : MUTED}
-                sub={vnIdx ? `${vnIdx.change >= 0 ? "+" : ""}${vnIdx.change_pct.toFixed(2)}%` : undefined}
-              />
-              <Sep />
-              <KpiItem
-                label="VN30"
-                value={data?.vn30
-                  ? data.vn30.value.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                  : "--"}
-                color={data?.vn30 ? priceColor(data.vn30.change) : MUTED}
-                sub={data?.vn30 ? `${data.vn30.change >= 0 ? "+" : ""}${data.vn30.change_pct.toFixed(2)}%` : undefined}
-              />
-              <Sep />
-              <KpiItem
-                label="HNX-Index"
-                value={data?.hnx
-                  ? data.hnx.value.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                  : "--"}
-                color={data?.hnx ? priceColor(data.hnx.change) : MUTED}
-                sub={data?.hnx ? `${data.hnx.change >= 0 ? "+" : ""}${data.hnx.change_pct.toFixed(2)}%` : undefined}
-              />
-              <Sep />
-              <KpiItem
-                label="Thanh khoản"
-                value={data?.liquidity != null
-                  ? `${data.liquidity.toLocaleString("vi-VN", { maximumFractionDigits: 0 })} tỷ`
-                  : "--"}
-                sub="HOSE"
-              />
-              <Sep />
-              <KpiItem
-                label="NN Ròng"
-                value={ffStr}
-                color={ffColor}
-                sub={ff !== null ? "Tỷ VND" : undefined}
-              />
-              <Sep />
-              <KpiItem
-                label="Độ rộng"
-                value={
-                  hose ? (
+            <div className="grid grid-cols-3 sm:grid-cols-6">
+              {[
+                {
+                  label: "VN-Index",
+                  value: vnIdx
+                    ? vnIdx.value.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : "--",
+                  color: vnIdx ? priceColor(vnIdx.change) : MUTED,
+                  sub: vnIdx ? `${vnIdx.change >= 0 ? "+" : ""}${vnIdx.change_pct.toFixed(2)}%` : undefined,
+                },
+                {
+                  label: "VN30",
+                  value: data?.vn30
+                    ? data.vn30.value.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : "--",
+                  color: data?.vn30 ? priceColor(data.vn30.change) : MUTED,
+                  sub: data?.vn30 ? `${data.vn30.change >= 0 ? "+" : ""}${data.vn30.change_pct.toFixed(2)}%` : undefined,
+                },
+                {
+                  label: "HNX-Index",
+                  value: data?.hnx
+                    ? data.hnx.value.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : "--",
+                  color: data?.hnx ? priceColor(data.hnx.change) : MUTED,
+                  sub: data?.hnx ? `${data.hnx.change >= 0 ? "+" : ""}${data.hnx.change_pct.toFixed(2)}%` : undefined,
+                },
+                {
+                  label: "Thanh khoản",
+                  value: data?.liquidity != null
+                    ? `${data.liquidity.toLocaleString("vi-VN", { maximumFractionDigits: 0 })} tỷ`
+                    : "--",
+                  sub: "HOSE",
+                },
+                {
+                  label: "NN Ròng",
+                  value: ffStr,
+                  color: ffColor,
+                  sub: ff !== null ? "Tỷ VND" : undefined,
+                },
+                {
+                  label: "Độ rộng",
+                  value: hose ? (
                     <span>
                       <span style={{ color: POS }}>+{hose.advance}</span>
                       <span style={{ color: "#1E293B" }}> / </span>
                       <span style={{ color: NEG }}>−{hose.decline}</span>
                     </span>
-                  ) : "--"
-                }
-                sub={
-                  breadthTotal > 0
+                  ) : "--",
+                  sub: breadthTotal > 0
                     ? `${Math.round((hose!.advance / breadthTotal) * 100)}% tăng giá`
-                    : undefined
-                }
-              />
+                    : undefined,
+                },
+              ].map((item, i, arr) => (
+                <div
+                  key={i}
+                  className="flex justify-center py-4 px-3"
+                  style={{
+                    borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
+                  }}
+                >
+                  <KpiItem
+                    label={item.label}
+                    value={item.value}
+                    color={item.color}
+                    sub={item.sub}
+                  />
+                </div>
+              ))}
             </div>
           </>
         )}
