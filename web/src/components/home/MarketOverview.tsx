@@ -21,11 +21,13 @@ interface BreadthData {
 interface SparklineData {
   vnindex:  number[];
   hnxindex: number[];
+  vn30:     number[];
   volume:   number[];
 }
 
 interface MarketData {
   vnindex:    IndexData | null;
+  vn30:       IndexData | null;
   hose:       BreadthData | null;
   hnx:        (IndexData & BreadthData) | null;
   liquidity:  number | null;
@@ -184,33 +186,6 @@ function IndexVal({ data }: { data: IndexData | null }) {
   );
 }
 
-function BreadthBar({ data }: { data: BreadthData | null }) {
-  const total   = data ? (data.advance + data.decline + data.unchanged) || 1 : 1;
-  const advPct  = data ? (data.advance   / total) * 100 : 0;
-  const decPct  = data ? (data.decline   / total) * 100 : 0;
-  const unchPct = data ? (data.unchanged / total) * 100 : 0;
-
-  return data ? (
-    <>
-      <div className="flex h-1 rounded-full overflow-hidden gap-[1px] mt-0.5">
-        <div className="rounded-full bg-profit transition-all duration-700" style={{ width: `${advPct}%` }} />
-        <div className="rounded-full bg-slate-700 transition-all duration-700" style={{ width: `${unchPct}%` }} />
-        <div className="rounded-full bg-loss   transition-all duration-700" style={{ width: `${decPct}%` }} />
-      </div>
-      <div className="flex gap-2 text-[9px] sm:text-[10px] font-mono">
-        <span className="text-profit">▲{data.advance}</span>
-        <span className="text-slate-600">—{data.unchanged}</span>
-        <span className="text-loss">▼{data.decline}</span>
-      </div>
-    </>
-  ) : (
-    <>
-      <div className="h-1 rounded-full bg-slate-800 mt-0.5" />
-      <div className="text-[10px] text-slate-700">--/--/--</div>
-    </>
-  );
-}
-
 // ── The 5 widgets ─────────────────────────────────────────────────────────────
 
 function VNIndexWidget({ data, sparkline }: { data: IndexData | null; sparkline?: number[] }) {
@@ -224,15 +199,12 @@ function VNIndexWidget({ data, sparkline }: { data: IndexData | null; sparkline?
   );
 }
 
-function HOSEWidget({ data, sparkline }: { data: BreadthData | null; sparkline?: number[] }) {
-  const color = data ? (data.advance >= data.decline ? PROFIT : LOSS) : PROFIT;
+function VN30Widget({ data, sparkline }: { data: IndexData | null; sparkline?: number[] }) {
+  const color = (data?.change ?? 0) >= 0 ? PROFIT : LOSS;
   return (
     <Widget>
-      <Label icon={BarChart3} text="HOSE" />
-      <div className={cn("font-mono font-bold text-base sm:text-lg leading-none", data ? "text-white" : "text-slate-600")}>
-        {data ? `${data.advance + data.decline + data.unchanged} mã` : "--"}
-      </div>
-      <BreadthBar data={data} />
+      <Label icon={BarChart3} text="VN30" />
+      <IndexVal data={data} />
       <Sparkline data={sparkline} color={color} />
     </Widget>
   );
@@ -388,7 +360,7 @@ export function MarketOverview() {
           ) : (
             <>
               <VNIndexWidget  data={data?.vnindex   ?? null} sparkline={sl?.vnindex} />
-              <HOSEWidget     data={data?.hose       ?? null} sparkline={sl?.vnindex} />
+              <VN30Widget     data={data?.vn30       ?? null} sparkline={sl?.vn30} />
               <HNXWidget      data={data?.hnx        ?? null} sparkline={sl?.hnxindex} />
               <LiquidityWidget value={data?.liquidity ?? null} sparkline={sl?.volume} />
               <VolumeWidget    value={data?.volume    ?? null} sparkline={sl?.volume} />

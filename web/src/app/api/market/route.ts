@@ -79,21 +79,26 @@ function toIndexData(closes: number[]): IndexData | null {
 async function fetchIndexData(): Promise<{
   vnindex:   IndexData | null;
   hnxindex:  IndexData | null;
-  sparklines: { vnindex: number[]; hnxindex: number[]; volume: number[] };
+  vn30:      IndexData | null;
+  sparklines: { vnindex: number[]; hnxindex: number[]; vn30: number[]; volume: number[] };
 }> {
-  const [vnRes, hnxRes] = await Promise.allSettled([
+  const [vnRes, hnxRes, vn30Res] = await Promise.allSettled([
     fetchVpsSymbol("VNINDEX"),
     fetchVpsSymbol("HNXINDEX"),
+    fetchVpsSymbol("VN30"),
   ]);
-  const vn  = vnRes.status  === "fulfilled" ? vnRes.value  : null;
-  const hnx = hnxRes.status === "fulfilled" ? hnxRes.value : null;
+  const vn   = vnRes.status   === "fulfilled" ? vnRes.value   : null;
+  const hnx  = hnxRes.status  === "fulfilled" ? hnxRes.value  : null;
+  const vn30 = vn30Res.status === "fulfilled" ? vn30Res.value : null;
   return {
-    vnindex:   vn  ? toIndexData(vn.closes)  : null,
-    hnxindex:  hnx ? toIndexData(hnx.closes) : null,
+    vnindex:   vn   ? toIndexData(vn.closes)   : null,
+    hnxindex:  hnx  ? toIndexData(hnx.closes)  : null,
+    vn30:      vn30 ? toIndexData(vn30.closes)  : null,
     sparklines: {
-      vnindex:  vn?.closes  ?? [],
-      hnxindex: hnx?.closes ?? [],
-      volume:   vn?.volumes ?? [],
+      vnindex:  vn?.closes   ?? [],
+      hnxindex: hnx?.closes  ?? [],
+      vn30:     vn30?.closes ?? [],
+      volume:   vn?.volumes  ?? [],
     },
   };
 }
@@ -171,11 +176,12 @@ async function fetchFromVci() {
 
   return {
     vnindex:    indexResult?.vnindex ?? null,
+    vn30:       indexResult?.vn30    ?? null,
     hose:       hose.advance + hose.decline + hose.unchanged > 0 ? hose : null,
     hnx:        hasHnx ? { ...(hnxIdx ?? {}), ...hnxBrd } : null,
     liquidity:  liq > 0  ? liq : null,
     volume:     vol > 0  ? vol : null,
-    sparklines: indexResult?.sparklines ?? { vnindex: [], hnxindex: [], volume: [] },
+    sparklines: indexResult?.sparklines ?? { vnindex: [], hnxindex: [], vn30: [], volume: [] },
     errors,
   };
 }
