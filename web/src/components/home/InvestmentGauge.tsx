@@ -2,17 +2,21 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 
-// ── Gauge geometry (Fear & Greed style) ───────────────────────────────────────
-const CX  = 130;   // SVG center X
-const CY  = 120;   // SVG center Y — arcs through top, endpoints at bottom
-const R   = 95;    // arc radius
-const SW  = 14;    // stroke width  (SW/R ≈ 0.15, matches reference)
-const PAD = 5;     // degrees trimmed each end → visual gap ≈ 2.6 px
+// ── Gauge geometry ─────────────────────────────────────────────────────────────
+const CX = 130;   // SVG center X
+const CY = 120;   // SVG center Y
+const R  = 95;    // arc radius
+const SW = 14;    // stroke width
 
-// cap_ext ≈ (SW/2)/R × (180/π) ≈ 4.22°
-// visual_gap ≈ 2×PAD − 2×cap_ext ≈ 10 − 8.44 = 1.56° ≈ 2.6 px   ✓
+// Each zone = 36° of arc. Arc length per zone = R × 36° × π/180 ≈ 59.69 px.
+// We use strokeDasharray to cut GAP px from EACH END of every zone arc.
+// The round linecap (radius = SW/2 = 7 px) extends over part of the gap,
+// leaving a net visible gap ≈ GAP − 7 ≈ 3 px — matching the Fear & Greed style.
+const ARC_LEN = +(R * 36 * Math.PI / 180).toFixed(2); // ≈ 59.69
+const GAP     = 10;                                     // px cut from each end
+const DASH_ON = +(ARC_LEN - 2 * GAP).toFixed(2);       // ≈ 39.69 visible px
 
-// ── Zone definitions (180° = left, 0° = right) ────────────────────────────────
+// ── Zone definitions (180° = left · 0° = right) ───────────────────────────────
 const ZONES = [
   { from: 180, to: 144, color: "#FF3B30", label_vi: "BÁN MẠNH", label: "STRONG SELL", emoji: "🔴", min: 0,  max: 20  },
   { from: 144, to: 108, color: "#FF9500", label_vi: "BÁN",       label: "SELL",        emoji: "🟠", min: 20, max: 40  },
@@ -84,18 +88,18 @@ function usePointerAngle(score: number) {
 export function InvestmentGauge({
   score, recommendation, confidence, reasoning, insight,
 }: GaugeProps) {
-  const uid   = useId();
-  const angle = usePointerAngle(score);
-  const zone  = zoneForScore(score);
-  const dot   = polar(CX, CY, R, angle);
+  const uid    = useId();
+  const angle  = usePointerAngle(score);
+  const zone   = zoneForScore(score);
+  const dot    = polar(CX, CY, R, angle);
   const glowId = `${uid}gw`;
 
-  const [recOn,    setRecOn]    = useState(false);
-  const [confW,    setConfW]    = useState(0);
-  const [bullets,  setBullets]  = useState(0);
-  const [insightOn,setInsightOn]= useState(false);
+  const [recOn,     setRecOn]     = useState(false);
+  const [confW,     setConfW]     = useState(0);
+  const [bullets,   setBullets]   = useState(0);
+  const [insightOn, setInsightOn] = useState(false);
 
-  useEffect(() => { const t = setTimeout(() => setRecOn(true),    700); return () => clearTimeout(t); }, []);
+  useEffect(() => { const t = setTimeout(() => setRecOn(true),      700); return () => clearTimeout(t); }, []);
   useEffect(() => { const t = setTimeout(() => setConfW(confidence), 500); return () => clearTimeout(t); }, [confidence]);
   useEffect(() => {
     setBullets(0);
@@ -125,7 +129,7 @@ export function InvestmentGauge({
             </filter>
           </defs>
 
-          {/* Background track — butt cap keeps it exactly within 180°→0° */}
+          {/* Background track — full semicircle, no caps protrusion */}
           <path
             d={arcD(CX, CY, R, 180, 0)}
             fill="none"
@@ -134,20 +138,22 @@ export function InvestmentGauge({
             strokeLinecap="butt"
           />
 
-          {/* 5 zone arcs — thick, round linecap, PAD gap on each end */}
+          {/* 5 zone arcs — each full 36°, gap cut via strokeDasharray */}
           {ZONES.map((z, i) => (
             <path
               key={i}
-              d={arcD(CX, CY, R, z.from - PAD, z.to + PAD)}
+              d={arcD(CX, CY, R, z.from, z.to)}
               fill="none"
               stroke={z.color}
               strokeWidth={SW}
               strokeLinecap="round"
+              strokeDasharray={`${DASH_ON} 10000`}
+              strokeDashoffset={GAP}
               opacity="1"
             />
           ))}
 
-          {/* Score — large number inside the arch */}
+          {/* Score number inside the arch */}
           <text
             x={CX} y={CY - 16}
             textAnchor="middle"
@@ -158,7 +164,7 @@ export function InvestmentGauge({
             {Math.round(score)}
           </text>
 
-          {/* Vietnamese zone label below score */}
+          {/* Vietnamese zone label */}
           <text
             x={CX} y={CY - 1}
             textAnchor="middle"
