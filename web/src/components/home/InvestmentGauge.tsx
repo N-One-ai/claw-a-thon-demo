@@ -2,16 +2,17 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 
-// ── Gauge geometry ─────────────────────────────────────────────────────────────
-const CX  = 130;  // SVG center X
-const CY  = 116;  // SVG center Y (slightly up to give room for score text)
-const R   = 84;   // arc radius
-const SW  = 18;   // stroke width — thick like Fear & Greed reference
-const PAD = 7;    // degrees trimmed each end → visible gap between rounded caps
-// Cap extension ≈ (SW/2)/R × (180/π) ≈ 6.12°
-// Visual gap per boundary ≈ PAD×2 − cap×2 ≈ 14 − 12.24 = 1.76° ≈ 2.6px
+// ── Gauge geometry (Fear & Greed style) ───────────────────────────────────────
+const CX  = 130;   // SVG center X
+const CY  = 120;   // SVG center Y — arcs through top, endpoints at bottom
+const R   = 95;    // arc radius
+const SW  = 14;    // stroke width  (SW/R ≈ 0.15, matches reference)
+const PAD = 5;     // degrees trimmed each end → visual gap ≈ 2.6 px
 
-// ── Zone definitions (180° = left/Bán Mạnh · 0° = right/Mua Mạnh) ───────────
+// cap_ext ≈ (SW/2)/R × (180/π) ≈ 4.22°
+// visual_gap ≈ 2×PAD − 2×cap_ext ≈ 10 − 8.44 = 1.56° ≈ 2.6 px   ✓
+
+// ── Zone definitions (180° = left, 0° = right) ────────────────────────────────
 const ZONES = [
   { from: 180, to: 144, color: "#FF3B30", label_vi: "BÁN MẠNH", label: "STRONG SELL", emoji: "🔴", min: 0,  max: 20  },
   { from: 144, to: 108, color: "#FF9500", label_vi: "BÁN",       label: "SELL",        emoji: "🟠", min: 20, max: 40  },
@@ -30,7 +31,7 @@ function arcD(cx: number, cy: number, r: number, fromDeg: number, toDeg: number)
   const s  = polar(cx, cy, r, fromDeg);
   const e  = polar(cx, cy, r, toDeg);
   const lg = Math.abs(fromDeg - toDeg) > 180 ? 1 : 0;
-  // sweep=0 → counterclockwise in SVG screen space → arcs through the TOP ✓
+  // sweep=0 → counterclockwise in SVG screen space → TOP semicircle ✓
   return `M ${s.x.toFixed(2)},${s.y.toFixed(2)} A ${r},${r} 0 ${lg},0 ${e.x.toFixed(2)},${e.y.toFixed(2)}`;
 }
 
@@ -89,47 +90,42 @@ export function InvestmentGauge({
   const dot   = polar(CX, CY, R, angle);
   const glowId = `${uid}gw`;
 
-  // Fade-in animations
-  const [recOn, setRecOn] = useState(false);
-  useEffect(() => { const t = setTimeout(() => setRecOn(true), 700); return () => clearTimeout(t); }, []);
+  const [recOn,    setRecOn]    = useState(false);
+  const [confW,    setConfW]    = useState(0);
+  const [bullets,  setBullets]  = useState(0);
+  const [insightOn,setInsightOn]= useState(false);
 
-  const [confWidth, setConfWidth] = useState(0);
-  useEffect(() => { const t = setTimeout(() => setConfWidth(confidence), 500); return () => clearTimeout(t); }, [confidence]);
-
-  const [shownBullets, setShownBullets] = useState(0);
+  useEffect(() => { const t = setTimeout(() => setRecOn(true),    700); return () => clearTimeout(t); }, []);
+  useEffect(() => { const t = setTimeout(() => setConfW(confidence), 500); return () => clearTimeout(t); }, [confidence]);
   useEffect(() => {
-    setShownBullets(0);
-    const timers = reasoning.map((_, i) =>
-      setTimeout(() => setShownBullets(i + 1), 900 + i * 220)
-    );
-    return () => timers.forEach(clearTimeout);
+    setBullets(0);
+    const ts = reasoning.map((_, i) => setTimeout(() => setBullets(i + 1), 900 + i * 220));
+    return () => ts.forEach(clearTimeout);
   }, [reasoning]);
-
-  const [insightOn, setInsightOn] = useState(false);
   useEffect(() => { const t = setTimeout(() => setInsightOn(true), 1500); return () => clearTimeout(t); }, []);
 
   return (
     <div className="flex flex-col gap-4">
 
-      {/* ── Gauge SVG ─────────────────────────────────────────────────── */}
-      <div className="relative select-none">
+      {/* ── SVG Gauge ─────────────────────────────────────────────────────── */}
+      <div className="select-none">
         <svg
-          viewBox="0 0 260 128"
+          viewBox="0 0 260 140"
           className="w-full"
-          style={{ display: "block", maxHeight: 160 }}
+          style={{ display: "block", maxHeight: 168 }}
           aria-label={`Gauge: ${recommendation}`}
         >
           <defs>
             <filter id={glowId} x="-80%" y="-80%" width="260%" height="260%">
-              <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b"/>
               <feMerge>
-                <feMergeNode in="b" />
-                <feMergeNode in="SourceGraphic" />
+                <feMergeNode in="b"/>
+                <feMergeNode in="SourceGraphic"/>
               </feMerge>
             </filter>
           </defs>
 
-          {/* ── Background track (butt cap so it stays strictly within 0°–180°) */}
+          {/* Background track — butt cap keeps it exactly within 180°→0° */}
           <path
             d={arcD(CX, CY, R, 180, 0)}
             fill="none"
@@ -138,7 +134,7 @@ export function InvestmentGauge({
             strokeLinecap="butt"
           />
 
-          {/* ── 5 Zone arcs — thick, rounded caps, PAD gap on each end ────── */}
+          {/* 5 zone arcs — thick, round linecap, PAD gap on each end */}
           {ZONES.map((z, i) => (
             <path
               key={i}
@@ -147,52 +143,43 @@ export function InvestmentGauge({
               stroke={z.color}
               strokeWidth={SW}
               strokeLinecap="round"
-              opacity="0.90"
+              opacity="1"
             />
           ))}
 
-          {/* ── Score number in center ─────────────────────────────────────── */}
+          {/* Score — large number inside the arch */}
           <text
-            x={CX}
-            y={CY - 16}
+            x={CX} y={CY - 16}
             textAnchor="middle"
-            fontSize="32"
-            fontWeight="700"
+            fontSize="34" fontWeight="700"
             fill="#FFFFFF"
             fontFamily="ui-monospace,monospace"
-            style={{ letterSpacing: "-0.5px" }}
           >
             {Math.round(score)}
           </text>
 
-          {/* ── Vietnamese zone label below score ─────────────────────────── */}
+          {/* Vietnamese zone label below score */}
           <text
-            x={CX}
-            y={CY - 1}
+            x={CX} y={CY - 1}
             textAnchor="middle"
-            fontSize="9"
-            fontWeight="600"
+            fontSize="9" fontWeight="600"
             fill={zone.color}
             fontFamily="ui-sans-serif,sans-serif"
-            style={{ letterSpacing: "0.09em" }}
+            letterSpacing="0.09em"
           >
             {zone.label_vi}
           </text>
 
-          {/* ── Dot glow ──────────────────────────────────────────────────── */}
+          {/* Dot glow */}
           <circle
-            cx={dot.x.toFixed(2)}
-            cy={dot.y.toFixed(2)}
-            r="10"
-            fill={zone.color}
-            opacity="0.20"
+            cx={dot.x.toFixed(2)} cy={dot.y.toFixed(2)}
+            r="10" fill={zone.color} opacity="0.18"
             filter={`url(#${glowId})`}
           />
 
-          {/* ── Dot on arc — solid dark circle, white border ──────────────── */}
+          {/* Dot on arc */}
           <circle
-            cx={dot.x.toFixed(2)}
-            cy={dot.y.toFixed(2)}
+            cx={dot.x.toFixed(2)} cy={dot.y.toFixed(2)}
             r="7"
             fill="rgba(5,8,16,1)"
             stroke="rgba(255,255,255,0.80)"
@@ -204,20 +191,14 @@ export function InvestmentGauge({
       {/* ── Khuyến nghị ──────────────────────────────────────────────────── */}
       <div
         className="flex flex-col items-center gap-1"
-        style={{
-          opacity:    recOn ? 1 : 0,
-          transform:  recOn ? "none" : "translateY(6px)",
-          transition: "opacity 0.5s ease, transform 0.5s ease",
-        }}
+        style={{ opacity: recOn ? 1 : 0, transform: recOn ? "none" : "translateY(6px)",
+                 transition: "opacity 0.5s ease, transform 0.5s ease" }}
       >
-        <div className="text-[9px] font-medium uppercase tracking-[0.2em]"
-          style={{ color: "#334155" }}>
+        <div className="text-[9px] font-medium uppercase tracking-[0.2em]" style={{ color: "#334155" }}>
           Khuyến nghị
         </div>
-        <div
-          className="text-[20px] font-bold font-mono tracking-widest"
-          style={{ color: zone.color, textShadow: `0 0 24px ${zone.color}50` }}
-        >
+        <div className="text-[20px] font-bold font-mono tracking-widest"
+          style={{ color: zone.color, textShadow: `0 0 24px ${zone.color}50` }}>
           {zone.emoji} {recommendation}
         </div>
       </div>
@@ -225,25 +206,17 @@ export function InvestmentGauge({
       {/* ── Độ tin cậy AI ────────────────────────────────────────────────── */}
       <div className="space-y-1.5">
         <div className="flex justify-between items-center">
-          <span className="text-[9px] font-medium uppercase tracking-[0.16em]"
-            style={{ color: "#334155" }}>
+          <span className="text-[9px] font-medium uppercase tracking-[0.16em]" style={{ color: "#334155" }}>
             Độ tin cậy AI
           </span>
-          <span className="text-[11px] font-mono font-semibold"
-            style={{ color: "#64748B" }}>
+          <span className="text-[11px] font-mono font-semibold" style={{ color: "#64748B" }}>
             {confidence}%
           </span>
         </div>
-        <div className="h-[2px] w-full rounded-full overflow-hidden"
-          style={{ background: "rgba(255,255,255,0.05)" }}>
-          <div
-            className="h-full rounded-full"
-            style={{
-              width:      `${confWidth}%`,
-              background: "linear-gradient(90deg, #334155, #64748B)",
-              transition: "width 1.1s cubic-bezier(0.4,0,0.2,1)",
-            }}
-          />
+        <div className="h-[2px] w-full rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
+          <div className="h-full rounded-full"
+            style={{ width: `${confW}%`, background: "linear-gradient(90deg,#334155,#64748B)",
+                     transition: "width 1.1s cubic-bezier(0.4,0,0.2,1)" }} />
         </div>
       </div>
 
@@ -251,45 +224,28 @@ export function InvestmentGauge({
       {reasoning.length > 0 && (
         <div className="space-y-1.5">
           {reasoning.map((text, i) => (
-            <div
-              key={i}
-              className="flex gap-2 items-start"
-              style={{
-                opacity:    i < shownBullets ? 1 : 0,
-                transform:  i < shownBullets ? "none" : "translateY(4px)",
-                transition: "opacity 0.4s ease, transform 0.4s ease",
-              }}
-            >
-              <span className="text-[9px] mt-[2px] flex-shrink-0 font-bold"
-                style={{ color: "#34C759" }}>✓</span>
-              <span className="text-[12px] leading-snug"
-                style={{ color: "#64748B" }}>{text}</span>
+            <div key={i} className="flex gap-2 items-start"
+              style={{ opacity: i < bullets ? 1 : 0, transform: i < bullets ? "none" : "translateY(4px)",
+                       transition: "opacity 0.4s ease, transform 0.4s ease" }}>
+              <span className="text-[9px] mt-[2px] flex-shrink-0 font-bold" style={{ color: "#34C759" }}>✓</span>
+              <span className="text-[12px] leading-snug" style={{ color: "#64748B" }}>{text}</span>
             </div>
           ))}
         </div>
       )}
 
       {/* ── Nhận định AI ─────────────────────────────────────────────────── */}
-      <div
-        className="rounded-2xl px-4 py-3.5 space-y-1.5"
-        style={{
-          background: "rgba(124,255,74,0.045)",
-          border:     "1px solid rgba(124,255,74,0.10)",
-          opacity:    insightOn ? 1 : 0,
-          transform:  insightOn ? "none" : "translateY(4px)",
-          transition: "opacity 0.5s ease, transform 0.5s ease",
-        }}
-      >
+      <div className="rounded-2xl px-4 py-3.5 space-y-1.5"
+        style={{ background: "rgba(124,255,74,0.045)", border: "1px solid rgba(124,255,74,0.10)",
+                 opacity: insightOn ? 1 : 0, transform: insightOn ? "none" : "translateY(4px)",
+                 transition: "opacity 0.5s ease, transform 0.5s ease" }}>
         <div className="flex items-center gap-2">
           <span style={{ fontSize: 11 }}>💡</span>
-          <span className="text-[9px] font-semibold uppercase tracking-[0.16em]"
-            style={{ color: "#475569" }}>
+          <span className="text-[9px] font-semibold uppercase tracking-[0.16em]" style={{ color: "#475569" }}>
             Nhận định AI
           </span>
         </div>
-        <p className="text-[12px] leading-relaxed" style={{ color: "#94A3B8" }}>
-          {insight}
-        </p>
+        <p className="text-[12px] leading-relaxed" style={{ color: "#94A3B8" }}>{insight}</p>
       </div>
 
     </div>
