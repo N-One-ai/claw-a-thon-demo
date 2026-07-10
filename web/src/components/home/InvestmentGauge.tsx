@@ -3,18 +3,19 @@
 import { useEffect, useId, useRef, useState } from "react";
 
 // ── Gauge geometry ─────────────────────────────────────────────────────────────
-const CX = 130; // SVG center X
-const CY = 118; // SVG center Y
-const R  = 100; // arc radius
-const SW = 13;  // arc stroke width
+const CX = 130;
+const CY = 118;
+const R  = 95;
+const SW = 10;
+const PAD = 2; // degrees of gap between zone arcs
 
-// ── Zone definitions (angle: 180° = left/Strong Sell, 0° = right/Strong Buy) ──
+// ── Zone definitions (angle: 180° = left/Bán Mạnh, 0° = right/Mua Mạnh) ──────
 const ZONES = [
-  { from: 180, to: 144, color: "#FF3B30", label: "STRONG SELL", emoji: "🔴", min: 0,  max: 20  },
-  { from: 144, to: 108, color: "#FF9500", label: "SELL",        emoji: "🟠", min: 20, max: 40  },
-  { from: 108, to:  72, color: "#FFD60A", label: "NEUTRAL",     emoji: "🟡", min: 40, max: 60  },
-  { from:  72, to:  36, color: "#34C759", label: "BUY",         emoji: "🟢", min: 60, max: 80  },
-  { from:  36, to:   0, color: "#7CFF4A", label: "STRONG BUY",  emoji: "💚", min: 80, max: 100 },
+  { from: 180, to: 144, color: "#FF3B30", label: "STRONG SELL", label_vi: "BÁN MẠNH", emoji: "🔴", min: 0,  max: 20  },
+  { from: 144, to: 108, color: "#FF9500", label: "SELL",        label_vi: "BÁN",       emoji: "🟠", min: 20, max: 40  },
+  { from: 108, to:  72, color: "#FFD60A", label: "NEUTRAL",     label_vi: "TRUNG LẬP", emoji: "🟡", min: 40, max: 60  },
+  { from:  72, to:  36, color: "#34C759", label: "BUY",         label_vi: "MUA",        emoji: "🟢", min: 60, max: 80  },
+  { from:  36, to:   0, color: "#7CFF4A", label: "STRONG BUY",  label_vi: "MUA MẠNH",  emoji: "💚", min: 80, max: 100 },
 ] as const;
 
 // ── Geometry helpers ───────────────────────────────────────────────────────────
@@ -27,7 +28,6 @@ function arcD(cx: number, cy: number, r: number, fromDeg: number, toDeg: number)
   const s  = polar(cx, cy, r, fromDeg);
   const e  = polar(cx, cy, r, toDeg);
   const lg = Math.abs(fromDeg - toDeg) > 180 ? 1 : 0;
-  // sweep=0 → counterclockwise on screen → goes through the TOP of the semicircle ✓
   return `M ${s.x.toFixed(2)},${s.y.toFixed(2)} A ${r},${r} 0 ${lg},0 ${e.x.toFixed(2)},${e.y.toFixed(2)}`;
 }
 
@@ -37,19 +37,19 @@ function zoneForScore(s: number) {
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 export interface GaugeProps {
-  score:          number;   // 0–100
-  recommendation: string;   // e.g. "BUY"
-  confidence:     number;   // 0–100
-  reasoning:      string[]; // up to 3 bullets
-  insight:        string;   // 1–2 sentence quote
+  score:          number;
+  recommendation: string;
+  confidence:     number;
+  reasoning:      string[];
+  insight:        string;
 }
 
 // ── Animated pointer ───────────────────────────────────────────────────────────
 function usePointerAngle(score: number) {
-  const target     = 180 - (Math.max(0, Math.min(100, score)) / 100) * 180;
-  const [angle, setAngle] = useState(180); // start at far left
-  const animRef    = useRef<number>(0);
-  const fromAngle  = useRef(180);
+  const target    = 180 - (Math.max(0, Math.min(100, score)) / 100) * 180;
+  const [angle, setAngle] = useState(180);
+  const animRef   = useRef<number>(0);
+  const fromAngle = useRef(180);
 
   useEffect(() => {
     cancelAnimationFrame(animRef.current);
@@ -60,8 +60,8 @@ function usePointerAngle(score: number) {
 
     const tick = (ts: number) => {
       if (!t0) t0 = ts;
-      const p   = Math.min((ts - t0) / dur, 1);
-      const ease = 1 - Math.pow(1 - p, 4); // easeOutQuart
+      const p    = Math.min((ts - t0) / dur, 1);
+      const ease = 1 - Math.pow(1 - p, 4);
       const cur  = from + (to - from) * ease;
       fromAngle.current = cur;
       setAngle(cur);
@@ -84,10 +84,9 @@ export function InvestmentGauge({
   const angle = usePointerAngle(score);
   const zone  = zoneForScore(score);
 
-  // Pointer tip
-  const ptr       = polar(CX, CY, R * 0.81, angle);
-  const glowId    = `${uid}gw`;
-  const clipId    = `${uid}cl`;
+  // Dot sits on the arc
+  const dot    = polar(CX, CY, R, angle);
+  const glowId = `${uid}gw`;
 
   // Recommendation fade-in
   const [recOn, setRecOn] = useState(false);
@@ -111,9 +110,6 @@ export function InvestmentGauge({
   const [insightOn, setInsightOn] = useState(false);
   useEffect(() => { const t = setTimeout(() => setInsightOn(true), 1500); return () => clearTimeout(t); }, []);
 
-  // Zone separator ticks (drawn in background color to create visual gaps)
-  const TICK_ANGLES = [144, 108, 72, 36];
-
   return (
     <div className="flex flex-col gap-4">
 
@@ -122,13 +118,12 @@ export function InvestmentGauge({
         <svg
           viewBox="0 0 260 130"
           className="w-full"
-          style={{ display: "block", maxHeight: 160 }}
+          style={{ display: "block", maxHeight: 155 }}
           aria-label={`Investment gauge: ${recommendation}`}
         >
           <defs>
-            {/* Pointer glow filter */}
             <filter id={glowId} x="-30%" y="-100%" width="160%" height="400%">
-              <feGaussianBlur in="SourceGraphic" stdDeviation="4.5" result="b" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation="3.5" result="b" />
               <feMerge>
                 <feMergeNode in="b" />
                 <feMergeNode in="SourceGraphic" />
@@ -145,109 +140,74 @@ export function InvestmentGauge({
             strokeLinecap="butt"
           />
 
-          {/* Zone arcs — inactive (dim) */}
+          {/* Zone arcs — each shrunk by PAD° on both ends to create natural gaps */}
           {ZONES.map((z, i) => (
             <path
               key={i}
-              d={arcD(CX, CY, R, z.from, z.to)}
+              d={arcD(CX, CY, R, z.from - PAD, z.to + PAD)}
               fill="none"
               stroke={z.color}
               strokeWidth={SW}
               strokeLinecap="butt"
-              opacity={z.label === zone.label ? "0" : "0.25"}
+              opacity={z.label === zone.label ? "0.95" : "0.22"}
+              style={z.label === zone.label
+                ? { filter: `drop-shadow(0 0 4px ${z.color}55)` }
+                : undefined}
             />
           ))}
 
-          {/* Active zone — bright + subtle glow */}
-          <path
-            d={arcD(CX, CY, R, zone.from, zone.to)}
-            fill="none"
-            stroke={zone.color}
-            strokeWidth={SW}
-            strokeLinecap="butt"
-            opacity="0.95"
-            style={{ filter: `drop-shadow(0 0 5px ${zone.color}60)` }}
-          />
+          {/* Score number — center of gauge */}
+          <text
+            x={CX}
+            y={CY - 20}
+            textAnchor="middle"
+            fontSize="30"
+            fontWeight="700"
+            fill="#FFFFFF"
+            fontFamily="ui-monospace,monospace"
+          >
+            {Math.round(score)}
+          </text>
 
-          {/* Zone separator ticks (mask lines in background color) */}
-          {TICK_ANGLES.map((deg, i) => {
-            const inner = polar(CX, CY, R - SW / 2 - 0.5, deg);
-            const outer = polar(CX, CY, R + SW / 2 + 0.5, deg);
-            return (
-              <line key={i}
-                x1={inner.x.toFixed(2)} y1={inner.y.toFixed(2)}
-                x2={outer.x.toFixed(2)} y2={outer.y.toFixed(2)}
-                stroke="rgba(9,13,20,0.85)"
-                strokeWidth="1.5"
-              />
-            );
-          })}
+          {/* Zone label (Vietnamese) — below score */}
+          <text
+            x={CX}
+            y={CY - 4}
+            textAnchor="middle"
+            fontSize="9"
+            fontWeight="600"
+            fill={zone.color}
+            fontFamily="ui-sans-serif,sans-serif"
+            letterSpacing="0.08em"
+          >
+            {zone.label_vi}
+          </text>
 
-          {/* Pointer glow layer */}
-          <line
-            x1={CX} y1={CY}
-            x2={ptr.x.toFixed(2)} y2={ptr.y.toFixed(2)}
-            stroke={zone.color}
-            strokeWidth="3"
-            strokeLinecap="round"
-            opacity="0.5"
+          {/* Dot glow layer */}
+          <circle
+            cx={dot.x.toFixed(2)}
+            cy={dot.y.toFixed(2)}
+            r="7"
+            fill={zone.color}
+            opacity="0.3"
             filter={`url(#${glowId})`}
           />
 
-          {/* Pointer needle */}
-          <line
-            x1={CX} y1={CY}
-            x2={ptr.x.toFixed(2)} y2={ptr.y.toFixed(2)}
-            stroke="#FFFFFF"
+          {/* Dot on arc — Fear & Greed style */}
+          <circle
+            cx={dot.x.toFixed(2)}
+            cy={dot.y.toFixed(2)}
+            r="5.5"
+            fill="rgba(9,13,20,0.95)"
+            stroke="rgba(255,255,255,0.85)"
             strokeWidth="1.5"
-            strokeLinecap="round"
           />
-
-          {/* Hub ring */}
-          <circle cx={CX} cy={CY} r="8"
-            fill="rgba(9,13,20,0.96)"
-            stroke="rgba(255,255,255,0.12)"
-            strokeWidth="1"
-          />
-          {/* Hub dot */}
-          <circle cx={CX} cy={CY} r="3"
+          <circle
+            cx={dot.x.toFixed(2)}
+            cy={dot.y.toFixed(2)}
+            r="2"
             fill={zone.color}
-            opacity="0.9"
           />
-
-          {/* Zone scale ticks (outer, hair-thin) */}
-          {[180, 144, 108, 72, 36, 0].map((deg, i) => {
-            const inner = polar(CX, CY, R + SW / 2 + 3, deg);
-            const outer = polar(CX, CY, R + SW / 2 + 8, deg);
-            return (
-              <line key={i}
-                x1={inner.x.toFixed(2)} y1={inner.y.toFixed(2)}
-                x2={outer.x.toFixed(2)} y2={outer.y.toFixed(2)}
-                stroke="rgba(255,255,255,0.12)"
-                strokeWidth="1"
-              />
-            );
-          })}
-
-          {/* Endpoint labels */}
-          {(() => {
-            const left  = polar(CX, CY, R + 22, 180);
-            const right = polar(CX, CY, R + 22,   0);
-            return (
-              <>
-                <text x={(left.x + 8).toFixed(1)} y={(left.y + 3).toFixed(1)}
-                  textAnchor="start" fontSize="8" fill="#334155"
-                  fontFamily="ui-sans-serif,sans-serif">
-                  Sell
-                </text>
-                <text x={(right.x - 8).toFixed(1)} y={(right.y + 3).toFixed(1)}
-                  textAnchor="end" fontSize="8" fill="#334155"
-                  fontFamily="ui-sans-serif,sans-serif">
-                  Buy
-                </text>
-              </>
-            );
-          })()}
         </svg>
       </div>
 
@@ -271,12 +231,12 @@ export function InvestmentGauge({
         </div>
       </div>
 
-      {/* ── AI Confidence ──────────────────────────────────────────────── */}
+      {/* ── Độ tin cậy AI ──────────────────────────────────────────────── */}
       <div className="space-y-1.5">
         <div className="flex justify-between items-center">
           <span className="text-[9px] font-medium uppercase tracking-[0.16em]"
             style={{ color: "#334155" }}>
-            AI Confidence
+            Độ tin cậy AI
           </span>
           <span className="text-[11px] font-mono font-semibold"
             style={{ color: "#64748B" }}>
@@ -296,7 +256,7 @@ export function InvestmentGauge({
         </div>
       </div>
 
-      {/* ── Reasoning bullets ──────────────────────────────────────────── */}
+      {/* ── Lý do phân tích ────────────────────────────────────────────── */}
       {reasoning.length > 0 && (
         <div className="space-y-1.5">
           {reasoning.map((text, i) => (
@@ -304,8 +264,8 @@ export function InvestmentGauge({
               key={i}
               className="flex gap-2 items-start"
               style={{
-                opacity:   i < shownBullets ? 1 : 0,
-                transform: i < shownBullets ? "none" : "translateY(4px)",
+                opacity:    i < shownBullets ? 1 : 0,
+                transform:  i < shownBullets ? "none" : "translateY(4px)",
                 transition: "opacity 0.4s ease, transform 0.4s ease",
               }}
             >
@@ -318,7 +278,7 @@ export function InvestmentGauge({
         </div>
       )}
 
-      {/* ── AI Insight card ────────────────────────────────────────────── */}
+      {/* ── Nhận định AI ───────────────────────────────────────────────── */}
       <div
         className="rounded-2xl px-4 py-3.5 space-y-1.5"
         style={{
@@ -333,7 +293,7 @@ export function InvestmentGauge({
           <span style={{ fontSize: 11 }}>💡</span>
           <span className="text-[9px] font-semibold uppercase tracking-[0.16em]"
             style={{ color: "#475569" }}>
-            AI Insight
+            Nhận định AI
           </span>
         </div>
         <p className="text-[12px] leading-relaxed" style={{ color: "#94A3B8" }}>

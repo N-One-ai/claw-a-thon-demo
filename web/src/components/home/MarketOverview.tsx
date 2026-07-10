@@ -31,11 +31,11 @@ function priceColor(v?: number | null) { return (v ?? 0) >= 0 ? POS : NEG; }
 // ── Gauge prop helpers ────────────────────────────────────────────────────────
 
 function gaugeRec(score: number): string {
-  if (score < 20) return "STRONG SELL";
-  if (score < 40) return "SELL";
-  if (score < 60) return "NEUTRAL";
-  if (score < 80) return "BUY";
-  return "STRONG BUY";
+  if (score < 20) return "BÁN MẠNH";
+  if (score < 40) return "BÁN";
+  if (score < 60) return "TRUNG LẬP";
+  if (score < 80) return "MUA";
+  return "MUA MẠNH";
 }
 
 function gaugeConfidence(data: MarketData): number {
@@ -56,37 +56,37 @@ function gaugeReasoning(data: MarketData): string[] {
 
   if (ff !== null)
     bullets.push(ff >= 0
-      ? "Foreign investors remain net buyers."
-      : "Foreign investors are net sellers this session.");
+      ? "Khối ngoại đang mua ròng trong phiên."
+      : "Khối ngoại bán ròng trong phiên giao dịch.");
 
   if (liq !== null)
     bullets.push(liq >= 8000
-      ? "Liquidity stays above the 20-session average."
-      : "Liquidity is running below the 20-session average.");
+      ? "Thanh khoản duy trì trên mức trung bình 20 phiên."
+      : "Thanh khoản đang thấp hơn mức trung bình 20 phiên.");
 
   if (sl.length >= 10) {
     const ra = sl.slice(-5).reduce((s, v) => s + v, 0) / 5;
     const oa = sl.slice(-10, -5).reduce((s, v) => s + v, 0) / 5;
-    if      (ra > oa * 1.01) bullets.push("VN-Index maintains a medium-term uptrend.");
-    else if (ra < oa * 0.99) bullets.push("Short-term price action shows mild weakness.");
-    else                      bullets.push("No major distribution signals detected.");
+    if      (ra > oa * 1.01) bullets.push("VN-Index duy trì xu hướng tăng trong trung hạn.");
+    else if (ra < oa * 0.99) bullets.push("Sóng ngắn hạn có dấu hiệu suy yếu nhẹ.");
+    else                      bullets.push("Không phát hiện tín hiệu phân phối đáng kể.");
   } else if (hose) {
     const total = hose.advance + hose.decline + hose.unchanged;
     const pct   = total > 0 ? (hose.advance / total) * 100 : 50;
     bullets.push(pct >= 50
-      ? "Market breadth remains broadly positive."
-      : "Breadth is mixed; selective stock-picking is key.");
+      ? "Độ rộng thị trường nghiêng về chiều tăng."
+      : "Độ rộng thị trường phân hóa; chọn lọc cổ phiếu là chủ đạo.");
   }
 
   return bullets.slice(0, 3);
 }
 
 function gaugeInsight(score: number): string {
-  if (score >= 80) return "Strong signals across the board — a favorable environment for building long-term positions.";
-  if (score >= 60) return "Current conditions favor gradual accumulation rather than aggressive buying.";
-  if (score >= 40) return "Market conditions warrant selective positioning in high-quality, liquid assets.";
-  if (score >= 20) return "Caution is advised; reducing exposure to higher-risk positions is prudent.";
-  return "Preserving capital takes priority. Wait for clearer recovery signals before re-entering.";
+  if (score >= 80) return "Tín hiệu tích cực trên diện rộng — môi trường thuận lợi để xây dựng danh mục dài hạn.";
+  if (score >= 60) return "Điều kiện hiện tại phù hợp tích lũy dần, không nên mua đuổi mạnh.";
+  if (score >= 40) return "Thị trường đang phân hóa — ưu tiên cổ phiếu chất lượng cao, thanh khoản tốt.";
+  if (score >= 20) return "Nên thận trọng; cân nhắc giảm tỷ trọng các vị thế có rủi ro cao.";
+  return "Ưu tiên bảo toàn vốn. Chờ thêm tín hiệu phục hồi rõ ràng trước khi tái cơ cấu danh mục.";
 }
 
 // ── LIVE badge ────────────────────────────────────────────────────────────────
