@@ -3,19 +3,21 @@
 import { useEffect, useId, useRef, useState } from "react";
 
 // ── Gauge geometry ─────────────────────────────────────────────────────────────
-const CX = 130;
-const CY = 118;
-const R  = 88;   // arc radius
-const SW = 13;   // arc stroke width
-const PAD = 5;   // degrees trimmed from each end → creates gap between rounded caps
+const CX  = 130;  // SVG center X
+const CY  = 116;  // SVG center Y (slightly up to give room for score text)
+const R   = 84;   // arc radius
+const SW  = 18;   // stroke width — thick like Fear & Greed reference
+const PAD = 7;    // degrees trimmed each end → visible gap between rounded caps
+// Cap extension ≈ (SW/2)/R × (180/π) ≈ 6.12°
+// Visual gap per boundary ≈ PAD×2 − cap×2 ≈ 14 − 12.24 = 1.76° ≈ 2.6px
 
-// ── Zone definitions (180° = left/Bán Mạnh, 0° = right/Mua Mạnh) ─────────────
+// ── Zone definitions (180° = left/Bán Mạnh · 0° = right/Mua Mạnh) ───────────
 const ZONES = [
-  { from: 180, to: 144, color: "#FF3B30", label: "STRONG SELL", label_vi: "BÁN MẠNH", emoji: "🔴", min: 0,  max: 20  },
-  { from: 144, to: 108, color: "#FF9500", label: "SELL",        label_vi: "BÁN",       emoji: "🟠", min: 20, max: 40  },
-  { from: 108, to:  72, color: "#FFD60A", label: "NEUTRAL",     label_vi: "TRUNG LẬP", emoji: "🟡", min: 40, max: 60  },
-  { from:  72, to:  36, color: "#34C759", label: "BUY",         label_vi: "MUA",        emoji: "🟢", min: 60, max: 80  },
-  { from:  36, to:   0, color: "#34D058", label: "STRONG BUY",  label_vi: "MUA MẠNH",  emoji: "💚", min: 80, max: 100 },
+  { from: 180, to: 144, color: "#FF3B30", label_vi: "BÁN MẠNH", label: "STRONG SELL", emoji: "🔴", min: 0,  max: 20  },
+  { from: 144, to: 108, color: "#FF9500", label_vi: "BÁN",       label: "SELL",        emoji: "🟠", min: 20, max: 40  },
+  { from: 108, to:  72, color: "#FFCC00", label_vi: "TRUNG LẬP", label: "NEUTRAL",     emoji: "🟡", min: 40, max: 60  },
+  { from:  72, to:  36, color: "#34C759", label_vi: "MUA",        label: "BUY",         emoji: "🟢", min: 60, max: 80  },
+  { from:  36, to:   0, color: "#30D158", label_vi: "MUA MẠNH",  label: "STRONG BUY",  emoji: "💚", min: 80, max: 100 },
 ] as const;
 
 // ── Geometry helpers ───────────────────────────────────────────────────────────
@@ -28,7 +30,7 @@ function arcD(cx: number, cy: number, r: number, fromDeg: number, toDeg: number)
   const s  = polar(cx, cy, r, fromDeg);
   const e  = polar(cx, cy, r, toDeg);
   const lg = Math.abs(fromDeg - toDeg) > 180 ? 1 : 0;
-  // sweep=0 → counterclockwise on screen → draws through the TOP of the semicircle
+  // sweep=0 → counterclockwise in SVG screen space → arcs through the TOP ✓
   return `M ${s.x.toFixed(2)},${s.y.toFixed(2)} A ${r},${r} 0 ${lg},0 ${e.x.toFixed(2)},${e.y.toFixed(2)}`;
 }
 
@@ -45,7 +47,7 @@ export interface GaugeProps {
   insight:        string;
 }
 
-// ── Animated pointer ───────────────────────────────────────────────────────────
+// ── Animated pointer angle ─────────────────────────────────────────────────────
 function usePointerAngle(score: number) {
   const target    = 180 - (Math.max(0, Math.min(100, score)) / 100) * 180;
   const [angle, setAngle] = useState(180);
@@ -84,20 +86,16 @@ export function InvestmentGauge({
   const uid   = useId();
   const angle = usePointerAngle(score);
   const zone  = zoneForScore(score);
-
-  // Dot sits directly on the arc
-  const dot    = polar(CX, CY, R, angle);
+  const dot   = polar(CX, CY, R, angle);
   const glowId = `${uid}gw`;
 
-  // Recommendation fade-in
+  // Fade-in animations
   const [recOn, setRecOn] = useState(false);
   useEffect(() => { const t = setTimeout(() => setRecOn(true), 700); return () => clearTimeout(t); }, []);
 
-  // Confidence bar animate
   const [confWidth, setConfWidth] = useState(0);
   useEffect(() => { const t = setTimeout(() => setConfWidth(confidence), 500); return () => clearTimeout(t); }, [confidence]);
 
-  // Bullets stagger
   const [shownBullets, setShownBullets] = useState(0);
   useEffect(() => {
     setShownBullets(0);
@@ -107,24 +105,23 @@ export function InvestmentGauge({
     return () => timers.forEach(clearTimeout);
   }, [reasoning]);
 
-  // Insight fade
   const [insightOn, setInsightOn] = useState(false);
   useEffect(() => { const t = setTimeout(() => setInsightOn(true), 1500); return () => clearTimeout(t); }, []);
 
   return (
     <div className="flex flex-col gap-4">
 
-      {/* ── Gauge SVG ───────────────────────────────────────────────────── */}
+      {/* ── Gauge SVG ─────────────────────────────────────────────────── */}
       <div className="relative select-none">
         <svg
-          viewBox="0 0 260 130"
+          viewBox="0 0 260 128"
           className="w-full"
-          style={{ display: "block", maxHeight: 155 }}
+          style={{ display: "block", maxHeight: 160 }}
           aria-label={`Gauge: ${recommendation}`}
         >
           <defs>
-            <filter id={glowId} x="-60%" y="-60%" width="220%" height="220%">
-              <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="b" />
+            <filter id={glowId} x="-80%" y="-80%" width="260%" height="260%">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b" />
               <feMerge>
                 <feMergeNode in="b" />
                 <feMergeNode in="SourceGraphic" />
@@ -132,16 +129,16 @@ export function InvestmentGauge({
             </filter>
           </defs>
 
-          {/* Background track — full semicircle, very subtle */}
+          {/* ── Background track (butt cap so it stays strictly within 0°–180°) */}
           <path
             d={arcD(CX, CY, R, 180, 0)}
             fill="none"
-            stroke="rgba(255,255,255,0.06)"
-            strokeWidth={SW + 4}
-            strokeLinecap="round"
+            stroke="rgba(255,255,255,0.07)"
+            strokeWidth={SW + 6}
+            strokeLinecap="butt"
           />
 
-          {/* Zone arcs — ALL full opacity, rounded caps, PAD gap on each end */}
+          {/* ── 5 Zone arcs — thick, rounded caps, PAD gap on each end ────── */}
           {ZONES.map((z, i) => (
             <path
               key={i}
@@ -150,63 +147,68 @@ export function InvestmentGauge({
               stroke={z.color}
               strokeWidth={SW}
               strokeLinecap="round"
-              opacity="0.85"
+              opacity="0.90"
             />
           ))}
 
-          {/* Score number — inside the semicircle */}
+          {/* ── Score number in center ─────────────────────────────────────── */}
           <text
             x={CX}
-            y={CY - 20}
+            y={CY - 16}
             textAnchor="middle"
-            fontSize="30"
+            fontSize="32"
             fontWeight="700"
             fill="#FFFFFF"
             fontFamily="ui-monospace,monospace"
+            style={{ letterSpacing: "-0.5px" }}
           >
             {Math.round(score)}
           </text>
 
-          {/* Vietnamese zone label — below score */}
+          {/* ── Vietnamese zone label below score ─────────────────────────── */}
           <text
             x={CX}
-            y={CY - 4}
+            y={CY - 1}
             textAnchor="middle"
             fontSize="9"
             fontWeight="600"
             fill={zone.color}
             fontFamily="ui-sans-serif,sans-serif"
-            letterSpacing="0.09em"
+            style={{ letterSpacing: "0.09em" }}
           >
             {zone.label_vi}
           </text>
 
-          {/* Dot glow */}
+          {/* ── Dot glow ──────────────────────────────────────────────────── */}
           <circle
             cx={dot.x.toFixed(2)}
             cy={dot.y.toFixed(2)}
-            r="9"
+            r="10"
             fill={zone.color}
-            opacity="0.25"
+            opacity="0.20"
             filter={`url(#${glowId})`}
           />
 
-          {/* Dot on arc — dark circle with thin white border (Fear & Greed style) */}
+          {/* ── Dot on arc — solid dark circle, white border ──────────────── */}
           <circle
             cx={dot.x.toFixed(2)}
             cy={dot.y.toFixed(2)}
-            r="6"
-            fill="rgba(6,10,18,0.98)"
-            stroke="rgba(255,255,255,0.75)"
+            r="7"
+            fill="rgba(5,8,16,1)"
+            stroke="rgba(255,255,255,0.80)"
             strokeWidth="1.5"
           />
         </svg>
       </div>
 
-      {/* ── Khuyến nghị ─────────────────────────────────────────────────── */}
+      {/* ── Khuyến nghị ──────────────────────────────────────────────────── */}
       <div
-        className="flex flex-col items-center gap-1 transition-all duration-600"
-        style={{ opacity: recOn ? 1 : 0, transform: recOn ? "none" : "translateY(6px)" }}
+        className="flex flex-col items-center gap-1"
+        style={{
+          opacity:    recOn ? 1 : 0,
+          transform:  recOn ? "none" : "translateY(6px)",
+          transition: "opacity 0.5s ease, transform 0.5s ease",
+        }}
       >
         <div className="text-[9px] font-medium uppercase tracking-[0.2em]"
           style={{ color: "#334155" }}>
@@ -214,16 +216,13 @@ export function InvestmentGauge({
         </div>
         <div
           className="text-[20px] font-bold font-mono tracking-widest"
-          style={{
-            color:      zone.color,
-            textShadow: `0 0 24px ${zone.color}50`,
-          }}
+          style={{ color: zone.color, textShadow: `0 0 24px ${zone.color}50` }}
         >
           {zone.emoji} {recommendation}
         </div>
       </div>
 
-      {/* ── Độ tin cậy AI ───────────────────────────────────────────────── */}
+      {/* ── Độ tin cậy AI ────────────────────────────────────────────────── */}
       <div className="space-y-1.5">
         <div className="flex justify-between items-center">
           <span className="text-[9px] font-medium uppercase tracking-[0.16em]"
@@ -242,13 +241,13 @@ export function InvestmentGauge({
             style={{
               width:      `${confWidth}%`,
               background: "linear-gradient(90deg, #334155, #64748B)",
-              transition: "width 1.1s cubic-bezier(0.4, 0, 0.2, 1)",
+              transition: "width 1.1s cubic-bezier(0.4,0,0.2,1)",
             }}
           />
         </div>
       </div>
 
-      {/* ── Lý do phân tích ─────────────────────────────────────────────── */}
+      {/* ── Lý do phân tích ──────────────────────────────────────────────── */}
       {reasoning.length > 0 && (
         <div className="space-y-1.5">
           {reasoning.map((text, i) => (
@@ -270,15 +269,15 @@ export function InvestmentGauge({
         </div>
       )}
 
-      {/* ── Nhận định AI ────────────────────────────────────────────────── */}
+      {/* ── Nhận định AI ─────────────────────────────────────────────────── */}
       <div
         className="rounded-2xl px-4 py-3.5 space-y-1.5"
         style={{
-          background:  "rgba(124,255,74,0.045)",
-          border:      "1px solid rgba(124,255,74,0.10)",
-          opacity:     insightOn ? 1 : 0,
-          transform:   insightOn ? "none" : "translateY(4px)",
-          transition:  "opacity 0.5s ease, transform 0.5s ease",
+          background: "rgba(124,255,74,0.045)",
+          border:     "1px solid rgba(124,255,74,0.10)",
+          opacity:    insightOn ? 1 : 0,
+          transform:  insightOn ? "none" : "translateY(4px)",
+          transition: "opacity 0.5s ease, transform 0.5s ease",
         }}
       >
         <div className="flex items-center gap-2">
