@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { InvestmentGauge } from "./InvestmentGauge";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface IndexData   { value: number; change: number; change_pct: number }
@@ -23,63 +24,69 @@ interface MarketData {
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const POS   = "#7CFF4A";
 const NEG   = "#FF5C7A";
-const WARN  = "#FFB020";
 const MUTED = "#64748B";
 
 function priceColor(v?: number | null) { return (v ?? 0) >= 0 ? POS : NEG; }
 
-// ── AI Insights (derived client-side from market data) ────────────────────────
-interface Insights {
-  score:             number;
-  risk:              string;
-  riskColor:         string;
-  sentiment:         string;
-  sentimentColor:    string;
-  recommendation:    string[];
+// ── Gauge prop helpers ────────────────────────────────────────────────────────
+
+function gaugeRec(score: number): string {
+  if (score < 20) return "STRONG SELL";
+  if (score < 40) return "SELL";
+  if (score < 60) return "NEUTRAL";
+  if (score < 80) return "BUY";
+  return "STRONG BUY";
 }
 
-function deriveInsights(d: MarketData): Insights {
-  const score = d.healthScore ?? 50;
-
-  const risk           = score >= 65 ? "Thấp"    : score < 40 ? "Cao"       : "Trung bình";
-  const riskColor      = score >= 65 ? POS        : score < 40 ? NEG         : WARN;
-  const sentiment      = score >= 60 ? "Tích cực" : score < 40 ? "Tiêu cực" : "Trung lập";
-  const sentimentColor = score >= 60 ? POS        : score < 40 ? NEG         : MUTED;
-
-  const recommendation = score >= 65
-    ? ["Tiếp tục nắm giữ doanh nghiệp chất lượng.", "Tích lũy từng phần ở vùng giá hợp lý."]
-    : score >= 50
-    ? ["Duy trì danh mục hiện tại, thận trọng với vị thế mới.", "Ưu tiên cổ phiếu cơ bản tốt, thanh khoản cao."]
-    : ["Giảm tỷ trọng rủi ro, nâng tỷ lệ tiền mặt.", "Chờ tín hiệu xác nhận trước khi mua thêm."];
-
-  return { score, risk, riskColor, sentiment, sentimentColor, recommendation };
+function gaugeConfidence(data: MarketData): number {
+  const score   = data.healthScore ?? 50;
+  const sources = [data.vnindex, data.vn30, data.hnx, data.liquidity, data.foreignFlow, data.hose]
+    .filter(v => v != null).length;
+  const dataConf    = (sources / 6) * 20;
+  const conviction  = Math.abs(score - 50) * 0.7;
+  return Math.round(Math.min(95, 44 + dataConf + conviction));
 }
 
-// ── useCountUp ────────────────────────────────────────────────────────────────
-function useCountUp(target: number | null, ms = 820): number | null {
-  const [cur,  setCur]  = useState<number | null>(null);
-  const raf   = useRef<number>(0);
-  const t0    = useRef<number>(0);
-  const from  = useRef<number>(0);
+function gaugeReasoning(data: MarketData): string[] {
+  const bullets: string[] = [];
+  const ff   = data.foreignFlow;
+  const liq  = data.liquidity;
+  const sl   = data.sparklines?.vnindex ?? [];
+  const hose = data.hose;
 
-  useEffect(() => {
-    if (target === null) { setCur(null); return; }
-    cancelAnimationFrame(raf.current);
-    t0.current   = performance.now();
-    from.current = cur ?? target * 0.92;
-    const tick = (ts: number) => {
-      const p = Math.min((ts - t0.current) / ms, 1);
-      const e = 1 - Math.pow(1 - p, 3);
-      setCur(from.current + (target - from.current) * e);
-      if (p < 1) raf.current = requestAnimationFrame(tick);
-      else        setCur(target);
-    };
-    raf.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf.current);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target]);
+  if (ff !== null)
+    bullets.push(ff >= 0
+      ? "Foreign investors remain net buyers."
+      : "Foreign investors are net sellers this session.");
 
-  return cur;
+  if (liq !== null)
+    bullets.push(liq >= 8000
+      ? "Liquidity stays above the 20-session average."
+      : "Liquidity is running below the 20-session average.");
+
+  if (sl.length >= 10) {
+    const ra = sl.slice(-5).reduce((s, v) => s + v, 0) / 5;
+    const oa = sl.slice(-10, -5).reduce((s, v) => s + v, 0) / 5;
+    if      (ra > oa * 1.01) bullets.push("VN-Index maintains a medium-term uptrend.");
+    else if (ra < oa * 0.99) bullets.push("Short-term price action shows mild weakness.");
+    else                      bullets.push("No major distribution signals detected.");
+  } else if (hose) {
+    const total = hose.advance + hose.decline + hose.unchanged;
+    const pct   = total > 0 ? (hose.advance / total) * 100 : 50;
+    bullets.push(pct >= 50
+      ? "Market breadth remains broadly positive."
+      : "Breadth is mixed; selective stock-picking is key.");
+  }
+
+  return bullets.slice(0, 3);
+}
+
+function gaugeInsight(score: number): string {
+  if (score >= 80) return "Strong signals across the board — a favorable environment for building long-term positions.";
+  if (score >= 60) return "Current conditions favor gradual accumulation rather than aggressive buying.";
+  if (score >= 40) return "Market conditions warrant selective positioning in high-quality, liquid assets.";
+  if (score >= 20) return "Caution is advised; reducing exposure to higher-risk positions is prudent.";
+  return "Preserving capital takes priority. Wait for clearer recovery signals before re-entering.";
 }
 
 // ── LIVE badge ────────────────────────────────────────────────────────────────
@@ -114,9 +121,9 @@ function LiveBadge({ lastFetch }: { lastFetch: Date | null }) {
 
 // ── Interactive VN-Index chart ────────────────────────────────────────────────
 function PremiumChart({ data, color = POS }: { data: number[]; color?: string }) {
-  const uid      = useId();
-  const svgRef   = useRef<SVGSVGElement>(null);
-  const [hIdx,   setHIdx] = useState<number | null>(null);
+  const uid    = useId();
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [hIdx, setHIdx] = useState<number | null>(null);
 
   if (!data || data.length < 2) {
     return (
@@ -131,9 +138,9 @@ function PremiumChart({ data, color = POS }: { data: number[]; color?: string })
   const CW = W - PL - PR; const CH = H - PT - PB;
 
   const rawMin = Math.min(...data); const rawMax = Math.max(...data);
-  const pad    = (rawMax - rawMin) * 0.08;
-  const lo     = rawMin - pad;    const hi  = rawMax + pad;
-  const rng    = hi - lo;
+  const pad = (rawMax - rawMin) * 0.08;
+  const lo  = rawMin - pad;    const hi  = rawMax + pad;
+  const rng = hi - lo;
 
   const toX = (i: number) => PL + (i / (data.length - 1)) * CW;
   const toY = (v: number) => PT + (1 - (v - lo) / rng) * CH;
@@ -150,7 +157,7 @@ function PremiumChart({ data, color = POS }: { data: number[]; color?: string })
   }
 
   const [lx, ly] = pts[pts.length - 1];
-  const areaPath  = `${linePath} L${lx},${H - PB} L${PL},${H - PB} Z`;
+  const areaPath = `${linePath} L${lx},${H - PB} L${PL},${H - PB} Z`;
 
   const gId  = `${uid}g`;
   const glow = `${uid}gw`;
@@ -165,7 +172,6 @@ function PremiumChart({ data, color = POS }: { data: number[]; color?: string })
     setHIdx(idx);
   };
 
-  // 4 Y-axis grid lines
   const yTicks = Array.from({ length: 4 }, (_, i) => {
     const v = lo + (i / 3) * rng;
     return { y: toY(v), label: Math.round(v).toLocaleString("vi-VN") };
@@ -196,33 +202,26 @@ function PremiumChart({ data, color = POS }: { data: number[]; color?: string })
         </filter>
       </defs>
 
-      {/* Grid lines + Y labels (right-aligned, inside chart) */}
       {yTicks.map((t, i) => (
         <g key={i}>
           <line x1={PL} y1={t.y} x2={W - PR} y2={t.y}
             stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
           {i > 0 && i < 3 && (
             <text x={W - PR - 4} y={t.y - 4} textAnchor="end"
-              fontSize="9" fill="#334155" fontFamily="ui-monospace,monospace">
+              fontSize="10" fill="#334155" fontFamily="ui-monospace,monospace">
               {t.label}
             </text>
           )}
         </g>
       ))}
 
-      {/* Area */}
       <path d={areaPath} fill={`url(#${gId})`} />
-
-      {/* Glow line */}
       <path d={linePath} fill="none" stroke={color} strokeWidth="5"
         strokeLinecap="round" strokeLinejoin="round"
         opacity="0.18" filter={`url(#${glow})`} />
-
-      {/* Main line */}
       <path d={linePath} fill="none" stroke={color} strokeWidth="1.8"
         strokeLinecap="round" strokeLinejoin="round" opacity="0.92" />
 
-      {/* Resting end-dot */}
       {hIdx === null && (
         <>
           <circle cx={lx} cy={ly} r="6"   fill={color} opacity="0.14" />
@@ -230,15 +229,12 @@ function PremiumChart({ data, color = POS }: { data: number[]; color?: string })
         </>
       )}
 
-      {/* Hover state */}
       {hIdx !== null && hx !== null && hy !== null && (
         <g>
           <line x1={hx} y1={PT} x2={hx} y2={H - PB}
             stroke="rgba(255,255,255,0.12)" strokeWidth="1" strokeDasharray="4,3" />
           <circle cx={hx} cy={hy} r="8"   fill={color} opacity="0.12" />
           <circle cx={hx} cy={hy} r="2.5" fill={color} opacity="0.95" />
-
-          {/* Tooltip */}
           {(() => {
             const bw = 122; const bh = 40;
             const bx = Math.max(PL + 2, Math.min(W - PR - bw - 2, hx - bw / 2));
@@ -271,36 +267,6 @@ function PremiumChart({ data, color = POS }: { data: number[]; color?: string })
   );
 }
 
-// ── Score bar ─────────────────────────────────────────────────────────────────
-function ScoreBar({ score }: { score: number }) {
-  const animated = useCountUp(score);
-  const color    = score >= 65 ? POS : score < 40 ? NEG : WARN;
-
-  return (
-    <div className="space-y-2.5">
-      <div className="flex items-baseline justify-between">
-        <span className="text-[10px] font-medium uppercase tracking-[0.16em]"
-          style={{ color: MUTED }}>
-          AI Market Score
-        </span>
-        <div className="flex items-baseline gap-1">
-          <span className="text-[22px] font-mono font-bold" style={{ color: "#FFFFFF" }}>
-            {animated !== null ? Math.round(animated) : "--"}
-          </span>
-          <span className="text-[11px] font-mono" style={{ color: "#334155" }}>/100</span>
-        </div>
-      </div>
-      <div className="w-full h-[3px] rounded-full overflow-hidden"
-        style={{ background: "rgba(255,255,255,0.06)" }}>
-        <div
-          className="h-full rounded-full transition-all duration-1000"
-          style={{ width: `${score}%`, background: color, boxShadow: `0 0 8px ${color}55` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 // ── Bottom KPI item ───────────────────────────────────────────────────────────
 function KpiItem({
   label, value, color, sub,
@@ -327,14 +293,6 @@ function KpiItem({
   );
 }
 
-// ── Separator ─────────────────────────────────────────────────────────────────
-function Sep() {
-  return (
-    <div className="flex-shrink-0"
-      style={{ width: 1, height: 28, background: "rgba(255,255,255,0.05)" }} />
-  );
-}
-
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 function Skeleton() {
   const bg0 = "rgba(255,255,255,0.04)";
@@ -344,63 +302,63 @@ function Skeleton() {
   return (
     <div>
       <div className="grid grid-cols-1 md:grid-cols-[45fr_55fr]">
-        {/* Left */}
-        <div className="p-8 space-y-6">
+        {/* Left — gauge placeholder */}
+        <div className="p-6 sm:p-7 space-y-5">
           <div className="flex items-center gap-3">
-            <div className={s} style={{ width: 32, height: 32, borderRadius: 10, background: bg0 }} />
-            <div className={s} style={{ height: 10, width: 140, background: bg0 }} />
+            <div className={s} style={{ width: 28, height: 28, borderRadius: 8, background: bg0 }} />
+            <div className="space-y-1.5">
+              <div className={s} style={{ height: 9, width: 130, background: bg0 }} />
+              <div className={s} style={{ height: 8, width: 80, background: bg0 }} />
+            </div>
           </div>
-          <div className="space-y-2.5">
-            {[1,.9,.85,.7].map((w, i) => (
-              <div key={i} className={s} style={{ height: 11, width: `${w * 100}%`, background: bg0 }} />
-            ))}
+          {/* Gauge arc placeholder */}
+          <div className={s} style={{ height: 120, borderRadius: 12, background: bg0 }} />
+          {/* Rec */}
+          <div className="flex flex-col items-center gap-1.5">
+            <div className={s} style={{ height: 8, width: 60, background: bg0 }} />
+            <div className={s} style={{ height: 22, width: 100, background: bg1 }} />
           </div>
-          <div className={s} style={{ height: 3, background: bg0 }} />
-          <div className="space-y-2">
+          {/* Confidence */}
+          <div className="space-y-1.5">
             <div className="flex justify-between">
-              <div className={s} style={{ height: 9, width: 80, background: bg0 }} />
-              <div className={s} style={{ height: 20, width: 48, background: bg1 }} />
-            </div>
-            <div className={s} style={{ height: 3, background: bg0 }} />
-          </div>
-          <div className={s} style={{ height: 3, background: bg0 }} />
-          <div className="grid grid-cols-2 gap-4">
-            {[0,1].map(i => (
-              <div key={i} className="space-y-1.5">
-                <div className={s} style={{ height: 8, width: 48, background: bg0 }} />
-                <div className={s} style={{ height: 14, width: 64, background: bg1 }} />
-              </div>
-            ))}
-            <div className="col-span-2 space-y-1.5">
               <div className={s} style={{ height: 8, width: 72, background: bg0 }} />
-              <div className={s} style={{ height: 11, background: bg0 }} />
-              <div className={s} style={{ height: 11, width: "80%", background: bg0 }} />
+              <div className={s} style={{ height: 8, width: 28, background: bg0 }} />
             </div>
+            <div className={s} style={{ height: 2, background: bg0 }} />
           </div>
+          {/* Bullets */}
+          {[1, 0.9, 0.75].map((w, i) => (
+            <div key={i} className="flex gap-2">
+              <div className={s} style={{ height: 8, width: 8, background: bg0, flexShrink: 0 }} />
+              <div className={s} style={{ height: 8, width: `${w * 100}%`, background: bg0 }} />
+            </div>
+          ))}
         </div>
-        {/* Right */}
-        <div className="p-8 space-y-5">
+        {/* Right — chart placeholder */}
+        <div className="p-6 sm:p-7 space-y-4">
           <div className="flex justify-between items-start">
             <div className="space-y-2">
-              <div className={s} style={{ height: 9, width: 60, background: bg0 }} />
-              <div className={s} style={{ height: 32, width: 140, background: bg1 }} />
+              <div className={s} style={{ height: 8, width: 60, background: bg0 }} />
+              <div className={s} style={{ height: 28, width: 140, background: bg1 }} />
             </div>
-            <div className={s} style={{ height: 24, width: 72, background: bg0 }} />
+            <div className={s} style={{ height: 22, width: 72, background: bg0 }} />
           </div>
-          <div className={s} style={{ height: 220, borderRadius: 8, background: bg0 }} />
+          <div className={s} style={{ height: 200, borderRadius: 8, background: bg0 }} />
           <div className="flex justify-between">
             <div className={s} style={{ height: 8, width: 48, background: bg0 }} />
             <div className={s} style={{ height: 8, width: 40, background: bg0 }} />
           </div>
         </div>
       </div>
-      {/* Bottom */}
+      {/* Bottom row */}
       <div style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-        <div className="flex gap-8 px-8 py-5">
+        <div className="grid grid-cols-3 sm:grid-cols-6 py-4">
           {[0,1,2,3,4,5].map(i => (
-            <div key={i} className="space-y-1.5 min-w-[72px]">
-              <div className={s} style={{ height: 8, width: 44, background: bg0 }} />
-              <div className={s} style={{ height: 14, width: 64, background: bg1 }} />
+            <div key={i} className="flex justify-center px-3 py-1">
+              <div className="space-y-1.5 text-center">
+                <div className={s} style={{ height: 7, width: 44, background: bg0 }} />
+                <div className={s} style={{ height: 13, width: 60, background: bg1 }} />
+              </div>
             </div>
           ))}
         </div>
@@ -438,15 +396,15 @@ export function MarketOverview() {
     return () => clearInterval(id);
   }, [load]);
 
-  // Derived
-  const insights   = data ? deriveInsights(data) : null;
-  const sl         = data?.sparklines;
-  const vnIdx      = data?.vnindex;
+  // Derived values
+  const score    = data?.healthScore ?? 50;
+  const sl       = data?.sparklines;
+  const vnIdx    = data?.vnindex;
   const chartColor = vnIdx ? priceColor(vnIdx.change) : POS;
 
-  const ff       = data?.foreignFlow;
-  const ffColor  = ff == null ? MUTED : ff >= 0 ? POS : NEG;
-  const ffStr    = ff == null
+  const ff           = data?.foreignFlow;
+  const ffColor      = ff == null ? MUTED : ff >= 0 ? POS : NEG;
+  const ffStr        = ff == null
     ? "--"
     : `${ff >= 0 ? "+" : ""}${Math.abs(ff).toLocaleString("vi-VN", { maximumFractionDigits: 0 })} tỷ`;
 
@@ -471,16 +429,16 @@ export function MarketOverview() {
       >
         {loading ? <Skeleton /> : (
           <>
-            {/* ── Two-column section ─────────────────────────────────────── */}
+            {/* ── Two-column main area ─────────────────────────────────── */}
             <div className="grid grid-cols-1 md:grid-cols-[45fr_55fr]">
 
-              {/* ── LEFT: AI Summary ──────────────────────────────────────── */}
+              {/* ── LEFT: Investment Gauge ─────────────────────────────── */}
               <div
-                className="flex flex-col gap-5 p-6 sm:p-7"
+                className="flex flex-col gap-1 p-6 sm:p-7"
                 style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
               >
                 {/* Header */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 mb-3">
                   <div
                     className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
                     style={{
@@ -504,42 +462,19 @@ export function MarketOverview() {
                   </div>
                 </div>
 
-                {/* Score */}
-                {insights && <ScoreBar score={insights.score} />}
-
-                {/* Risk / Sentiment / Recommendation */}
-                {insights && (
-                  <>
-                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }} />
-                    <div className="grid grid-cols-2 gap-x-5 gap-y-4">
-                      <div className="space-y-1">
-                        <div className="text-[9px] font-medium uppercase tracking-[0.16em]"
-                          style={{ color: "#334155" }}>Rủi ro</div>
-                        <div className="text-[13px] font-semibold" style={{ color: insights.riskColor }}>
-                          {insights.risk}
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="text-[9px] font-medium uppercase tracking-[0.16em]"
-                          style={{ color: "#334155" }}>Tâm lý</div>
-                        <div className="text-[13px] font-semibold" style={{ color: insights.sentimentColor }}>
-                          {insights.sentiment}
-                        </div>
-                      </div>
-                      <div className="col-span-2 space-y-1.5">
-                        <div className="text-[9px] font-medium uppercase tracking-[0.16em]"
-                          style={{ color: "#334155" }}>Khuyến nghị</div>
-                        {insights.recommendation.map((r, i) => (
-                          <div key={i} className="text-[12px] leading-snug"
-                            style={{ color: "#64748B" }}>{r}</div>
-                        ))}
-                      </div>
-                    </div>
-                  </>
+                {/* Investment Gauge */}
+                {data && (
+                  <InvestmentGauge
+                    score={score}
+                    recommendation={gaugeRec(score)}
+                    confidence={gaugeConfidence(data)}
+                    reasoning={gaugeReasoning(data)}
+                    insight={gaugeInsight(score)}
+                  />
                 )}
               </div>
 
-              {/* ── RIGHT: Chart ──────────────────────────────────────────── */}
+              {/* ── RIGHT: Chart ───────────────────────────────────────── */}
               <div
                 className="flex flex-col gap-4 p-6 sm:p-7"
                 style={{
@@ -583,7 +518,7 @@ export function MarketOverview() {
                   )}
                 </div>
 
-                {/* Chart container */}
+                {/* Chart */}
                 <div className="relative flex-1" style={{ minHeight: 160 }}>
                   {sl?.vnindex && sl.vnindex.length >= 2 ? (
                     <PremiumChart data={sl.vnindex} color={chartColor} />
@@ -595,7 +530,7 @@ export function MarketOverview() {
                   )}
                 </div>
 
-                {/* X-axis time labels */}
+                {/* X-axis labels */}
                 <div className="flex justify-between text-[9px] font-mono"
                   style={{ color: "#1E293B" }}>
                   <span>−27 ngày</span>
@@ -604,7 +539,7 @@ export function MarketOverview() {
               </div>
             </div>
 
-            {/* ── BOTTOM KPI ROW ─────────────────────────────────────────── */}
+            {/* ── BOTTOM KPI ROW ──────────────────────────────────────── */}
             <div className="grid grid-cols-3 sm:grid-cols-6">
               {[
                 {
