@@ -18,12 +18,13 @@ const ZONES = [
   { from:  36, to:   0, color: "#16A34A", label_vi: "MUA MẠNH",  min: 80, max: 100 },
 ] as const;
 
-// ── Visual arc zones — 4 color bands drawn on the gauge ──────────────────────
+// ── Visual arc zones — 5 equal segments (36° each) matching ZONES ────────────
 const ARC_ZONES = [
-  { from: 180, to: 144, color: "#EF4444" },   // Red:    0–20
-  { from: 144, to: 108, color: "#F97316" },   // Orange: 20–40
-  { from: 108, to:  72, color: "#EAB308" },   // Yellow: 40–60
-  { from:  72, to:   0, color: "#22C55E" },   // Green:  60–100
+  { from: 180, to: 144, color: "#EF4444" },   // Red:        0–20
+  { from: 144, to: 108, color: "#F97316" },   // Orange:    20–40
+  { from: 108, to:  72, color: "#EAB308" },   // Yellow:    40–60
+  { from:  72, to:  36, color: "#22C55E" },   // Green:     60–80
+  { from:  36, to:   0, color: "#16A34A" },   // Dk Green:  80–100
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
