@@ -120,26 +120,53 @@ function LiveBadge({ lastFetch }: { lastFetch: Date | null }) {
 }
 
 // ── Interactive VN-Index chart ────────────────────────────────────────────────
-function PremiumChart({ data, color = POS }: { data: number[]; color?: string }) {
+function PremiumChart({ data, color = POS, endValue, endChange, endChangePct }: {
+  data: number[]; color?: string; endValue?: number; endChange?: number; endChangePct?: number;
+}) {
   const uid    = useId();
-  const svgRef = useRef<SVGSVGElement>(null);
+  const animNm = `ep${uid.replace(/[^a-zA-Z0-9]/g, '')}`;
+  const svgRef       = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [hIdx, setHIdx] = useState<number | null>(null);
+  const [W, setW] = useState(0);
+  const [H, setH] = useState(0);
 
-  if (!data || data.length < 2) {
+  // Measure actual container pixel dimensions so SVG coords = CSS pixels (no distortion)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const measure = () => {
+      const { width, height } = el.getBoundingClientRect();
+      if (width > 0 && height > 0) { setW(width); setH(height); }
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const hasData = data != null && data.length >= 2;
+  const hasSize = W > 0 && H > 0;
+
+  if (!hasData || !hasSize) {
     return (
-      <div className="flex items-center justify-center h-full text-sm" style={{ color: MUTED }}>
-        Đang tải dữ liệu biểu đồ...
+      <div ref={containerRef} style={{ position: 'relative', width: '100%', height: '100%' }}>
+        {!hasData && (
+          <div className="flex items-center justify-center h-full text-sm" style={{ color: MUTED }}>
+            Đang tải dữ liệu biểu đồ...
+          </div>
+        )}
       </div>
     );
   }
 
-  const W = 600; const H = 260;
-  const PL = 8; const PR = 8; const PT = 16; const PB = 8;
+  // W and H are actual CSS pixels — SVG coordinate system is 1:1 with screen pixels
+  const PL = 8; const PR = 24; const PT = 16; const PB = 8;
   const CW = W - PL - PR; const CH = H - PT - PB;
 
   const rawMin = Math.min(...data); const rawMax = Math.max(...data);
   const pad = (rawMax - rawMin) * 0.08;
-  const lo  = rawMin - pad;    const hi  = rawMax + pad;
+  const lo  = rawMin - pad; const hi = rawMax + pad;
   const rng = hi - lo;
 
   const toX = (i: number) => PL + (i / (data.length - 1)) * CW;
@@ -159,13 +186,14 @@ function PremiumChart({ data, color = POS }: { data: number[]; color?: string })
   const [lx, ly] = pts[pts.length - 1];
   const areaPath = `${linePath} L${lx},${H - PB} L${PL},${H - PB} Z`;
 
-  const gId  = `${uid}g`;
-  const glow = `${uid}gw`;
+  const gId    = `${uid}g`;
+  const glowId = `${uid}gw`;
 
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const svgX = ((e.clientX - rect.left) / rect.width) * W;
+    // No viewBox — SVG units = CSS pixels, so clientX offset is the SVG coordinate
+    const svgX = e.clientX - rect.left;
     const idx  = Math.max(0, Math.min(data.length - 1,
       Math.round(((svgX - PL) / CW) * (data.length - 1))
     ));
@@ -181,89 +209,219 @@ function PremiumChart({ data, color = POS }: { data: number[]; color?: string })
   const hy = hIdx !== null ? pts[hIdx][1] : null;
 
   return (
-    <svg
-      ref={svgRef}
-      viewBox={`0 0 ${W} ${H}`}
-      preserveAspectRatio="none"
-      className="w-full h-full"
-      style={{ display: "block", cursor: hIdx !== null ? "crosshair" : "default" }}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={() => setHIdx(null)}
-    >
-      <defs>
-        <linearGradient id={gId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor={color} stopOpacity="0.24" />
-          <stop offset="60%"  stopColor={color} stopOpacity="0.05" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-        <filter id={glow} x="-5%" y="-40%" width="110%" height="180%">
-          <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="b" />
-          <feComposite in="SourceGraphic" in2="b" operator="over" />
-        </filter>
-      </defs>
+    <div ref={containerRef} style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <style>{`
+        @keyframes ${animNm} {
+          0%   { transform: scale(1);   opacity: 0.70; }
+          65%  { opacity: 0.08; }
+          100% { transform: scale(3.2); opacity: 0; }
+        }
+      `}</style>
+      {/*
+        No viewBox on this SVG — coordinate system is 1:1 with CSS pixels.
+        W and H come from ResizeObserver, so scaleX = scaleY = 1.
+        SVG <circle> elements are perfectly round; no preserveAspectRatio distortion.
+      */}
+      <svg
+        ref={svgRef}
+        style={{
+          position: 'absolute', inset: 0,
+          width: '100%', height: '100%',
+          display: 'block', overflow: 'visible',
+          cursor: hIdx !== null ? 'crosshair' : 'default',
+        }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setHIdx(null)}
+      >
+        <defs>
+          <linearGradient id={gId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stopColor={color} stopOpacity="0.24" />
+            <stop offset="60%"  stopColor={color} stopOpacity="0.05" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+          <filter id={glowId} x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="b" />
+            <feComposite in="SourceGraphic" in2="b" operator="over" />
+          </filter>
+        </defs>
 
-      {yTicks.map((t, i) => (
-        <g key={i}>
-          <line x1={PL} y1={t.y} x2={W - PR} y2={t.y}
+        {yTicks.map((t, i) => (
+          <line key={i} x1={PL} y1={t.y} x2={W - PR} y2={t.y}
             stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
-          {i > 0 && i < 3 && (
-            <text x={W - PR - 4} y={t.y - 4} textAnchor="end"
-              fontSize="10" fill="#334155" fontFamily="ui-monospace,monospace">
-              {t.label}
-            </text>
-          )}
-        </g>
+        ))}
+
+        <path d={areaPath} fill={`url(#${gId})`} />
+        <path d={linePath} fill="none" stroke={color} strokeWidth="5"
+          strokeLinecap="round" strokeLinejoin="round"
+          opacity="0.18" filter={`url(#${glowId})`} />
+        <path d={linePath} fill="none" stroke={color} strokeWidth="1.8"
+          strokeLinecap="round" strokeLinejoin="round" opacity="0.92" />
+
+        {/* Endpoint marker — SVG circles, no distortion because coords = CSS pixels */}
+        {hIdx === null && (
+          <g>
+            <line x1={lx} y1={ly} x2={lx} y2={H - PB}
+              stroke={color} strokeWidth="1"
+              strokeDasharray="3 4" strokeLinecap="round"
+              opacity="0.18"
+            />
+            {/* Glow halo */}
+            <circle cx={lx} cy={ly} r={10}
+              fill={color} opacity="0.14"
+              filter={`url(#${glowId})`}
+            />
+            {/* Pulse ring — transform-box keeps scale origin at circle center */}
+            <circle cx={lx} cy={ly} r={6}
+              fill="none" stroke={color} strokeWidth="1.5"
+              style={{
+                transformBox: 'fill-box',
+                transformOrigin: 'center',
+                animation: `${animNm} 2.6s ease-out infinite`,
+              } as React.CSSProperties}
+            />
+            {/* Main dot */}
+            <circle cx={lx} cy={ly} r={5}
+              fill={color}
+              stroke="rgba(255,255,255,0.90)"
+              strokeWidth="1.5"
+            />
+          </g>
+        )}
+
+        {/* Hover crosshair + dot — SVG circles, perfectly round */}
+        {hIdx !== null && hx !== null && hy !== null && (
+          <g>
+            <line x1={hx} y1={PT} x2={hx} y2={H - PB}
+              stroke="rgba(255,255,255,0.12)" strokeWidth="1" strokeDasharray="4,3" />
+            <circle cx={hx} cy={hy} r={8} fill={color} opacity="0.12" />
+            <circle cx={hx} cy={hy} r={3} fill={color} opacity="0.95" />
+          </g>
+        )}
+      </svg>
+
+      {/* Y-axis tick labels — HTML, positioned in CSS pixels */}
+      {yTicks.slice(1, 3).map((tick, i) => (
+        <div
+          key={i}
+          style={{
+            position: 'absolute',
+            right: PR + 4,
+            top: tick.y,
+            transform: 'translateY(-100%)',
+            paddingBottom: 2,
+            fontSize: 9,
+            lineHeight: 1,
+            color: '#334155',
+            fontFamily: 'ui-monospace, monospace',
+            pointerEvents: 'none',
+            userSelect: 'none',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {tick.label}
+        </div>
       ))}
 
-      <path d={areaPath} fill={`url(#${gId})`} />
-      <path d={linePath} fill="none" stroke={color} strokeWidth="5"
-        strokeLinecap="round" strokeLinejoin="round"
-        opacity="0.18" filter={`url(#${glow})`} />
-      <path d={linePath} fill="none" stroke={color} strokeWidth="1.8"
-        strokeLinecap="round" strokeLinejoin="round" opacity="0.92" />
+      {/* Hover tooltip — HTML outside SVG, positioned in CSS pixels */}
+      {hIdx !== null && hx !== null && hy !== null && (() => {
+        const daysAgo = data.length - 1 - hIdx;
+        const d = new Date();
+        d.setDate(d.getDate() - daysAgo);
+        const dateStr = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+        const val = data[hIdx].toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return (
+          <div
+            style={{
+              position: 'absolute',
+              left: hx,
+              top: hy,
+              transform: 'translate(-50%, calc(-100% - 10px))',
+              background: 'rgba(8, 12, 20, 0.96)',
+              border: '0.5px solid rgba(255,255,255,0.10)',
+              borderRadius: 7,
+              padding: '7px 13px',
+              whiteSpace: 'nowrap',
+              pointerEvents: 'none',
+              zIndex: 10,
+            }}
+          >
+            <div style={{
+              color: '#FFFFFF',
+              fontSize: 13,
+              fontWeight: 700,
+              fontFamily: 'ui-monospace, monospace',
+              lineHeight: 1.3,
+              textAlign: 'center',
+            }}>
+              {val}
+            </div>
+            <div style={{
+              color: MUTED,
+              fontSize: 10,
+              fontFamily: 'ui-sans-serif, sans-serif',
+              lineHeight: 1.3,
+              marginTop: 3,
+              textAlign: 'center',
+            }}>
+              {dateStr}
+            </div>
+          </div>
+        );
+      })()}
 
-      {hIdx === null && (
-        <>
-          <circle cx={lx} cy={ly} r="6"   fill={color} opacity="0.14" />
-          <circle cx={lx} cy={ly} r="2.5" fill={color} opacity="0.9"  />
-        </>
+      {/* Price badge — HTML outside SVG, floats left of the endpoint dot */}
+      {hIdx === null && endValue != null && (
+        <div
+          style={{
+            position: 'absolute',
+            left: lx,
+            top: ly,
+            pointerEvents: 'none',
+            zIndex: 2,
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              right: 'calc(100% + 14px)',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: 'rgba(8, 12, 20, 0.90)',
+              border: '0.5px solid rgba(255,255,255,0.08)',
+              borderLeft: `2px solid ${color}80`,
+              borderRadius: 8,
+              padding: '6px 14px 6px 11px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <div style={{
+              color: '#FFFFFF',
+              fontSize: 13,
+              fontWeight: 700,
+              fontFamily: 'ui-monospace, monospace',
+              lineHeight: 1.45,
+            }}>
+              {endValue.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            {endChange != null && endChangePct != null && (
+              <div style={{
+                color,
+                fontSize: 10.5,
+                fontWeight: 500,
+                fontFamily: 'ui-monospace, monospace',
+                lineHeight: 1.4,
+                marginTop: 3,
+                opacity: 0.85,
+              }}>
+                {`${endChange >= 0 ? '+' : ''}${endChange.toFixed(2)}`}
+                {'  '}
+                {`${endChangePct >= 0 ? '+' : ''}${endChangePct.toFixed(2)}%`}
+              </div>
+            )}
+          </div>
+        </div>
       )}
-
-      {hIdx !== null && hx !== null && hy !== null && (
-        <g>
-          <line x1={hx} y1={PT} x2={hx} y2={H - PB}
-            stroke="rgba(255,255,255,0.12)" strokeWidth="1" strokeDasharray="4,3" />
-          <circle cx={hx} cy={hy} r="8"   fill={color} opacity="0.12" />
-          <circle cx={hx} cy={hy} r="2.5" fill={color} opacity="0.95" />
-          {(() => {
-            const bw = 122; const bh = 40;
-            const bx = Math.max(PL + 2, Math.min(W - PR - bw - 2, hx - bw / 2));
-            const by = Math.max(PT + 2, hy - bh - 12);
-            const val = data[hIdx].toLocaleString("vi-VN", {
-              minimumFractionDigits: 2, maximumFractionDigits: 2,
-            });
-            const daysAgo = data.length - 1 - hIdx;
-            const d = new Date();
-            d.setDate(d.getDate() - daysAgo);
-            const dateStr = `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}`;
-            return (
-              <g>
-                <rect x={bx} y={by} width={bw} height={bh} rx="7"
-                  fill="rgba(8,12,20,0.96)" stroke="rgba(255,255,255,0.10)" strokeWidth="0.5" />
-                <text x={bx + bw / 2} y={by + 16} textAnchor="middle"
-                  fontSize="13" fill="#FFFFFF" fontWeight="700" fontFamily="ui-monospace,monospace">
-                  {val}
-                </text>
-                <text x={bx + bw / 2} y={by + 31} textAnchor="middle"
-                  fontSize="10" fill={MUTED} fontFamily="ui-sans-serif,sans-serif">
-                  {dateStr}
-                </text>
-              </g>
-            );
-          })()}
-        </g>
-      )}
-    </svg>
+    </div>
   );
 }
 
@@ -414,8 +572,8 @@ export function MarketOverview() {
   return (
     <div
       className={cn(
-        "w-full max-w-5xl mx-auto transition-all duration-700",
-        visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4",
+        "w-full max-w-5xl mx-auto transition-opacity duration-700",
+        visible ? "opacity-100" : "opacity-0",
       )}
     >
       <div
@@ -430,11 +588,11 @@ export function MarketOverview() {
         {loading ? <Skeleton /> : (
           <>
             {/* ── Two-column main area ─────────────────────────────────── */}
-            <div className="grid grid-cols-1 md:grid-cols-[45fr_55fr]">
+            <div className="grid grid-cols-1 md:grid-cols-[36fr_64fr]">
 
               {/* ── LEFT: Investment Gauge ─────────────────────────────── */}
               <div
-                className="flex flex-col gap-1 p-6 sm:p-7"
+                className="flex flex-col gap-1 p-4 sm:p-5"
                 style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
               >
                 {/* Header */}
@@ -521,7 +679,13 @@ export function MarketOverview() {
                 {/* Chart */}
                 <div className="relative flex-1" style={{ minHeight: 160 }}>
                   {sl?.vnindex && sl.vnindex.length >= 2 ? (
-                    <PremiumChart data={sl.vnindex} color={chartColor} />
+                    <PremiumChart
+                    data={sl.vnindex}
+                    color={chartColor}
+                    endValue={vnIdx?.value}
+                    endChange={vnIdx?.change}
+                    endChangePct={vnIdx?.change_pct}
+                  />
                   ) : (
                     <div className="flex items-center justify-center h-full text-sm"
                       style={{ color: MUTED }}>

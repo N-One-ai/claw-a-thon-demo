@@ -37,8 +37,8 @@ export const vi: Translations = {
 
   hero: {
     badge: "AI phân tích đầu tư • Dữ liệu HOSE & HNX • Cập nhật liên tục",
-    titleWhite: "AI Phân Tích",
-    titleGradient: "Chứng Khoán Việt Nam",
+    titleWhite: "Phân tích, định giá cổ phiếu",
+    titleGradient: "bằng AI",
     subtitle: "AI đồng hành cùng nhà đầu tư trung và dài hạn.",
     subtitleHighlight: "Định giá thông minh • Phân tích rủi ro • Báo cáo đầu tư bằng AI",
     placeholder: "Nhập mã cổ phiếu: FPT, VCB, HPG...",
@@ -52,8 +52,8 @@ export const vi: Translations = {
   },
 
   search: {
-    titleWhite: "AI Phân Tích",
-    titleGradient: "Chứng Khoán Việt Nam",
+    titleWhite: "Phân tích, định giá cổ phiếu",
+    titleGradient: "bằng AI",
     subtitle: "Định giá thông minh · Phân tích rủi ro · Báo cáo chuyên sâu từ AI",
     placeholder: "Nhập mã cổ phiếu (VD: FPT, VCB, HPG)...",
     analyzeBtn: "Phân Tích",

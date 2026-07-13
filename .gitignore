@@ -39,3 +39,5 @@ web/node_modules
 web/.next
 .cache
 web/.env.local
+.greennode.json
+.agentbase/
