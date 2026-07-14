@@ -7,7 +7,7 @@ const CX       = 170;           // arc center x
 const CY       = 165;           // arc center y
 const R        = 125;           // arc radius
 const SW       = 20;            // stroke width (arc thickness)
-const PAD      = 6;             // degrees trimmed per end → ~5px visible gap
+const PAD      = 0;             // no trimming — zones tile edge-to-edge
 const VBOX     = "0 0 340 205";
 const TICK_IN  = R + SW / 2 + 3;   // 138 — inner tick radius
 const TICK_OUT = R + SW / 2 + 9;   // 144 — outer tick radius
@@ -179,28 +179,47 @@ export function InvestmentGauge({ score, confidence, reasoning, insight }: Gauge
           {ARC_ZONES.map((z, i) => z.color === active && (
             <path
               key={`gl${i}`}
-              d={arcD(CX, CY, R, z.from - PAD, z.to + PAD)}
+              d={arcD(CX, CY, R, z.from, z.to)}
               fill="none"
               stroke={z.color}
               strokeWidth={SW + 20}
-              strokeLinecap="round"
+              strokeLinecap="butt"
               opacity="0.18"
               filter="url(#g-glow)"
             />
           ))}
 
-          {/* Color arcs — active zone full brightness, others dimmed to 50% */}
+          {/* Color arcs — butt linecap so zones tile into one continuous arc */}
           {ARC_ZONES.map((z, i) => (
             <path
               key={i}
-              d={arcD(CX, CY, R, z.from - PAD, z.to + PAD)}
+              d={arcD(CX, CY, R, z.from, z.to)}
               fill="none"
               stroke={z.color}
               strokeWidth={SW}
-              strokeLinecap="round"
+              strokeLinecap="butt"
               opacity={z.color === active ? 1 : 0.5}
             />
           ))}
+
+          {/* Rounded end caps at the two arc endpoints (180° and 0°) */}
+          {(() => {
+            const pL = polar(CX, CY, R, 180);
+            const pR = polar(CX, CY, R, 0);
+            const hl = SW / 2;
+            return (
+              <>
+                <circle cx={pL.x} cy={pL.y} r={hl}
+                  fill={ARC_ZONES[0].color}
+                  opacity={ARC_ZONES[0].color === active ? 1 : 0.5}
+                />
+                <circle cx={pR.x} cy={pR.y} r={hl}
+                  fill={ARC_ZONES[3].color}
+                  opacity={ARC_ZONES[3].color === active ? 1 : 0.5}
+                />
+              </>
+            );
+          })()}
 
           {/* Tick marks every 10 points */}
           {TICK_VALS.map(v => {
