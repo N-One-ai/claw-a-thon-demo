@@ -3,17 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 
 // ── Geometry ──────────────────────────────────────────────────────────────────
-const CX       = 170;           // arc center x
-const CY       = 165;           // arc center y
-const R        = 125;           // arc radius
-const SW       = 20;            // stroke width (arc thickness)
-const PAD      = 0;             // no trimming — zones tile edge-to-edge
-const VBOX     = "0 0 340 205";
-const TICK_IN  = R + SW / 2 + 3;   // 138 — inner tick radius
-const TICK_OUT = R + SW / 2 + 9;   // 144 — outer tick radius
-const LABEL_R  = R + SW / 2 + 22;  // 157 — label radius
+const CX   = 160;
+const CY   = 158;
+const R    = 128;
+const SW   = 22;
+const VBOX = "0 0 320 192";
 
-// ── Business-logic zones (5) — drives recommendation label + color ────────────
+// ── Business-logic zones (5) — drives label + color ───────────────────────────
 const ZONES = [
   { color: "#EF4444", label_vi: "BÁN MẠNH", min: 0,  max: 20  },
   { color: "#F97316", label_vi: "BÁN",       min: 20, max: 40  },
@@ -22,18 +18,7 @@ const ZONES = [
   { color: "#16A34A", label_vi: "MUA MẠNH",  min: 80, max: 100 },
 ] as const;
 
-// ── Visual arc zones (4 equal 45° bands, user-specified) ─────────────────────
-const ARC_ZONES = [
-  { from: 180, to: 135, color: "#EF4444" },   // score  0–25
-  { from: 135, to:  90, color: "#F97316" },   // score 25–50
-  { from:  90, to:  45, color: "#EAB308" },   // score 50–75
-  { from:  45, to:   0, color: "#22C55E" },   // score 75–100
-];
-
-const TICK_VALS  = Array.from({ length: 11 }, (_, i) => i * 10);
-const TICK_MAJOR = new Set([0, 25, 50, 75, 100]);
-
-// ── Pure helpers ──────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function polar(cx: number, cy: number, r: number, deg: number) {
   const rad = (deg * Math.PI) / 180;
   return { x: cx + r * Math.cos(rad), y: cy - r * Math.sin(rad) };
@@ -54,11 +39,6 @@ function zoneForScore(s: number) {
   return ZONES.find(z => s >= z.min && s < z.max) ?? ZONES[4];
 }
 
-function activeArcColor(s: number): string {
-  const a = scoreToAngle(s);
-  return (ARC_ZONES.find(z => a <= z.from && a >= z.to) ?? ARC_ZONES[3]).color;
-}
-
 // ── Props ─────────────────────────────────────────────────────────────────────
 export interface GaugeProps {
   score:          number;
@@ -68,8 +48,8 @@ export interface GaugeProps {
   insight:        string;
 }
 
-// ── Needle animation — 800ms cubic ease-out, starts from 0 on mount ───────────
-function useNeedleAngle(score: number) {
+// ── Pointer animation — 800ms cubic ease-out, starts at 0 on mount ────────────
+function usePointerAngle(score: number) {
   const target  = scoreToAngle(score);
   const [angle, setAngle] = useState(180);
   const animRef = useRef<number>(0);
@@ -84,7 +64,7 @@ function useNeedleAngle(score: number) {
     const tick = (ts: number) => {
       if (!t0) t0 = ts;
       const p    = Math.min((ts - t0) / dur, 1);
-      const ease = 1 - Math.pow(1 - p, 3);   // cubic ease-out
+      const ease = 1 - Math.pow(1 - p, 3);
       const cur  = from + (target - from) * ease;
       fromRef.current = cur;
       setAngle(cur);
@@ -99,25 +79,27 @@ function useNeedleAngle(score: number) {
   return angle;
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Component ─────────────────────────────────────────────────────────────────
 export function InvestmentGauge({ score, confidence, reasoning, insight }: GaugeProps) {
-  const angle  = useNeedleAngle(score);
-  const zone   = zoneForScore(score);
-  const active = activeArcColor(score);
+  const angle = usePointerAngle(score);
+  const zone  = zoneForScore(score);
 
-  // Needle — thin tapered polygon, tip at 86% of arc radius
-  const tip  = polar(CX, CY, R * 0.86, angle);
-  const tail = polar(CX, CY, 18,       angle + 180);
+  // Triangle pointer — rides on the arc, tip pointing toward center
   const sinA = Math.sin(angle * Math.PI / 180);
   const cosA = Math.cos(angle * Math.PI / 180);
-  const hw   = 2.2;
-  const needlePath = [
-    `M ${(CX + sinA * hw).toFixed(2)},${(CY + cosA * hw).toFixed(2)}`,
-    `L ${tip.x.toFixed(2)},${tip.y.toFixed(2)}`,
-    `L ${(CX - sinA * hw).toFixed(2)},${(CY - cosA * hw).toFixed(2)}`,
-    `L ${tail.x.toFixed(2)},${tail.y.toFixed(2)}`,
-    "Z",
-  ].join(" ");
+  // Unit tangent (perpendicular to radius, CCW)
+  const tx = -sinA, ty = -cosA;
+  // Radial outward / inward unit vectors
+  const rox = cosA, roy = -sinA;
+  const rix = -cosA, riy = sinA;
+
+  const triAnchor = polar(CX, CY, R, angle);
+  const h  = 12;  // half-height: base to center, center to tip
+  const hw = 8;   // half-width of base
+  const bL = { x: triAnchor.x + rox * h + tx * hw, y: triAnchor.y + roy * h + ty * hw };
+  const bR = { x: triAnchor.x + rox * h - tx * hw, y: triAnchor.y + roy * h - ty * hw };
+  const tp = { x: triAnchor.x + rix * h,            y: triAnchor.y + riy * h            };
+  const pointerPts = `${bL.x.toFixed(2)},${bL.y.toFixed(2)} ${bR.x.toFixed(2)},${bR.y.toFixed(2)} ${tp.x.toFixed(2)},${tp.y.toFixed(2)}`;
 
   // Staggered reveals
   const [confWidth,    setConfWidth   ] = useState(0);
@@ -154,151 +136,41 @@ export function InvestmentGauge({ score, confidence, reasoning, insight }: Gauge
           aria-label={`Gauge: ${zone.label_vi}`}
         >
           <defs>
-            <filter id="g-glow" x="-40%" y="-40%" width="180%" height="180%">
-              <feGaussianBlur stdDeviation="5" result="b"/>
-              <feMerge>
-                <feMergeNode in="b"/>
-                <feMergeNode in="SourceGraphic"/>
-              </feMerge>
-            </filter>
-            <filter id="g-hub" x="-120%" y="-120%" width="340%" height="340%">
-              <feDropShadow dx="0" dy="2" stdDeviation="5" floodColor="#000" floodOpacity="0.6"/>
-            </filter>
+            {/* Horizontal gradient spanning full arc width — 4 zone colors */}
+            <linearGradient
+              id="arc-grad"
+              x1={CX - R} y1="0"
+              x2={CX + R} y2="0"
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop offset="0%"    stopColor="#EF4444"/>
+              <stop offset="33.3%" stopColor="#F97316"/>
+              <stop offset="66.7%" stopColor="#EAB308"/>
+              <stop offset="100%"  stopColor="#22C55E"/>
+            </linearGradient>
           </defs>
 
-          {/* Background track */}
+          {/* Single continuous 180° arc with 4-zone gradient */}
           <path
-            d={arcD(CX, CY, R, 178, 2)}
+            d={arcD(CX, CY, R, 180, 0)}
             fill="none"
-            stroke="rgba(255,255,255,0.06)"
-            strokeWidth={SW + 2}
+            stroke="url(#arc-grad)"
+            strokeWidth={SW}
             strokeLinecap="round"
           />
 
-          {/* Active-zone soft glow layer */}
-          {ARC_ZONES.map((z, i) => z.color === active && (
-            <path
-              key={`gl${i}`}
-              d={arcD(CX, CY, R, z.from, z.to)}
-              fill="none"
-              stroke={z.color}
-              strokeWidth={SW + 20}
-              strokeLinecap="butt"
-              opacity="0.18"
-              filter="url(#g-glow)"
-            />
-          ))}
-
-          {/* Color arcs — butt linecap so zones tile into one continuous arc */}
-          {ARC_ZONES.map((z, i) => (
-            <path
-              key={i}
-              d={arcD(CX, CY, R, z.from, z.to)}
-              fill="none"
-              stroke={z.color}
-              strokeWidth={SW}
-              strokeLinecap="butt"
-              opacity={z.color === active ? 1 : 0.5}
-            />
-          ))}
-
-          {/* Rounded end caps at the two arc endpoints (180° and 0°) */}
-          {(() => {
-            const pL = polar(CX, CY, R, 180);
-            const pR = polar(CX, CY, R, 0);
-            const hl = SW / 2;
-            return (
-              <>
-                <circle cx={pL.x} cy={pL.y} r={hl}
-                  fill={ARC_ZONES[0].color}
-                  opacity={ARC_ZONES[0].color === active ? 1 : 0.5}
-                />
-                <circle cx={pR.x} cy={pR.y} r={hl}
-                  fill={ARC_ZONES[3].color}
-                  opacity={ARC_ZONES[3].color === active ? 1 : 0.5}
-                />
-              </>
-            );
-          })()}
-
-          {/* Tick marks every 10 points */}
-          {TICK_VALS.map(v => {
-            const a  = scoreToAngle(v);
-            const p1 = polar(CX, CY, TICK_IN,  a);
-            const p2 = polar(CX, CY, TICK_OUT, a);
-            return (
-              <line
-                key={v}
-                x1={p1.x.toFixed(2)} y1={p1.y.toFixed(2)}
-                x2={p2.x.toFixed(2)} y2={p2.y.toFixed(2)}
-                stroke={TICK_MAJOR.has(v) ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.18)"}
-                strokeWidth={TICK_MAJOR.has(v) ? 1.5 : 1}
-                strokeLinecap="round"
-              />
-            );
-          })}
-
-          {/* Zone labels: 0  25  50  75  100 */}
-          {[0, 25, 50, 75, 100].map(v => {
-            const a      = scoreToAngle(v);
-            const p      = polar(CX, CY, LABEL_R, a);
-            const anchor: "start" | "middle" | "end" =
-              v === 0 ? "end" : v === 100 ? "start" : "middle";
-            return (
-              <text
-                key={v}
-                x={p.x.toFixed(2)}
-                y={(p.y + 4).toFixed(2)}
-                textAnchor={anchor}
-                fontSize="11"
-                fontWeight="500"
-                fill="rgba(100,116,139,0.85)"
-                fontFamily="ui-monospace,monospace"
-              >
-                {v}
-              </text>
-            );
-          })}
-
-          {/* Needle */}
-          <path d={needlePath} fill="#0F172A"/>
-
-          {/* Hub: dark navy fill + white border + shadow */}
-          <circle cx={CX} cy={CY} r={13} fill="#0F172A" filter="url(#g-hub)"/>
-          <circle cx={CX} cy={CY} r={13} fill="none" stroke="rgba(255,255,255,0.65)" strokeWidth="1.5"/>
-          <circle cx={CX} cy={CY} r={5}  fill="#1E293B"/>
+          {/* Triangle pointer on the arc */}
+          <polygon points={pointerPts} fill="#64748B"/>
         </svg>
       </div>
 
       {/* ── Score display ────────────────────────────────────────────────────── */}
-      <div className="flex flex-col items-center -mt-3 gap-1">
-        <div
-          className="font-mono tabular-nums"
-          style={{ fontSize: 64, fontWeight: 700, lineHeight: 1, color: "#FFFFFF" }}
-        >
+      <div className="flex flex-col items-center -mt-2 gap-1">
+        <div style={{ fontSize: 76, fontWeight: 700, lineHeight: 1, color: "#FFFFFF" }}>
           {Math.round(score)}
         </div>
-        <div
-          style={{
-            fontSize:      20,
-            fontWeight:    600,
-            lineHeight:    1.3,
-            color:         zone.color,
-            letterSpacing: "0.08em",
-          }}
-        >
+        <div style={{ fontSize: 22, fontWeight: 400, lineHeight: 1.4, color: "#CBD5E1" }}>
           {zone.label_vi}
-        </div>
-        <div
-          style={{
-            fontSize:      11,
-            fontWeight:    500,
-            textTransform: "uppercase" as const,
-            letterSpacing: "0.20em",
-            color:         "#334155",
-          }}
-        >
-          Khuyến nghị đầu tư
         </div>
       </div>
 
