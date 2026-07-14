@@ -25,20 +25,14 @@ function polar(cx: number, cy: number, r: number, deg: number) {
 }
 
 function arcD(cx: number, cy: number, r: number, fromDeg: number, toDeg: number) {
-  const span = fromDeg - toDeg;
-  // SVG arcs of exactly 180° are degenerate (browser picks wrong semicircle).
-  // Split through the midpoint to force the upper path unambiguously.
-  if (span >= 180) {
-    const mid = (fromDeg + toDeg) / 2;
-    const s = polar(cx, cy, r, fromDeg);
-    const m = polar(cx, cy, r, mid);
-    const e = polar(cx, cy, r, toDeg);
-    return `M ${s.x.toFixed(2)},${s.y.toFixed(2)} A ${r},${r} 0 0,0 ${m.x.toFixed(2)},${m.y.toFixed(2)} A ${r},${r} 0 0,0 ${e.x.toFixed(2)},${e.y.toFixed(2)}`;
-  }
-  const s  = polar(cx, cy, r, fromDeg);
-  const e  = polar(cx, cy, r, toDeg);
-  const lg = span > 180 ? 1 : 0;
-  return `M ${s.x.toFixed(2)},${s.y.toFixed(2)} A ${r},${r} 0 ${lg},0 ${e.x.toFixed(2)},${e.y.toFixed(2)}`;
+  const s     = polar(cx, cy, r, fromDeg);
+  const e     = polar(cx, cy, r, toDeg);
+  const span  = fromDeg - toDeg;
+  // For span ≥ 180° the two semicircles are equal length; sweep=0 is ambiguous
+  // and browsers pick the lower arc. sweep=1 (CW in SVG Y-down) forces upper.
+  const sweep = span >= 180 ? 1 : 0;
+  const lg    = span > 180  ? 1 : 0;
+  return `M ${s.x.toFixed(2)},${s.y.toFixed(2)} A ${r},${r} 0 ${lg},${sweep} ${e.x.toFixed(2)},${e.y.toFixed(2)}`;
 }
 
 function scoreToAngle(s: number) {
