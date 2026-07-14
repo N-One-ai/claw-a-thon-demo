@@ -7,7 +7,7 @@ const CX   = 160;
 const CY   = 158;
 const R    = 128;
 const SW   = 22;
-const VBOX = "0 0 320 192";
+const VBOX = "0 0 320 205";
 
 // ── Business-logic zones (5) — drives label + color ───────────────────────────
 const ZONES = [
@@ -165,17 +165,33 @@ export function InvestmentGauge({ score, confidence, reasoning, insight }: Gauge
 
           {/* Triangle pointer on the arc */}
           <polygon points={pointerPts} fill="#64748B"/>
-        </svg>
-      </div>
 
-      {/* ── Score display ────────────────────────────────────────────────────── */}
-      <div className="flex flex-col items-center -mt-2 gap-1">
-        <div style={{ fontSize: 76, fontWeight: 700, lineHeight: 1, color: "#FFFFFF" }}>
-          {Math.round(score)}
-        </div>
-        <div style={{ fontSize: 22, fontWeight: 400, lineHeight: 1.4, color: "#CBD5E1" }}>
-          {zone.label_vi}
-        </div>
+          {/* Score number — centered inside the arc */}
+          <text
+            x={CX}
+            y={CY - 18}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="#FFFFFF"
+            fontSize={66}
+            fontWeight={700}
+          >
+            {Math.round(score)}
+          </text>
+
+          {/* Zone label */}
+          <text
+            x={CX}
+            y={CY + 22}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="#CBD5E1"
+            fontSize={18}
+            fontWeight={400}
+          >
+            {zone.label_vi}
+          </text>
+        </svg>
       </div>
 
       {/* ── AI Confidence ────────────────────────────────────────────────────── */}
