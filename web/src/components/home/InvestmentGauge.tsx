@@ -169,7 +169,7 @@ export function InvestmentGauge({ score, confidence, reasoning, insight }: Gauge
           {/* Score number — centered inside the arc */}
           <text
             x={CX}
-            y={CY - 18}
+            y={CY - 50}
             textAnchor="middle"
             dominantBaseline="middle"
             fill="#FFFFFF"
@@ -179,10 +179,10 @@ export function InvestmentGauge({ score, confidence, reasoning, insight }: Gauge
             {Math.round(score)}
           </text>
 
-          {/* Zone label */}
+          {/* Zone label — aligned with the arc endpoints (gauge feet) */}
           <text
             x={CX}
-            y={CY + 22}
+            y={CY}
             textAnchor="middle"
             dominantBaseline="middle"
             fill="#CBD5E1"
