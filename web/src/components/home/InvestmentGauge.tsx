@@ -6,8 +6,8 @@ import { useEffect, useRef, useState } from "react";
 const CX  = 130;
 const CY  = 130;
 const R   = 100;
-const SW  = 18;
-const PAD = 5;   // degrees trimmed from each end for visible gaps
+const SW  = 20;
+const PAD = 7;   // degrees trimmed per end → ~5px visible gap between zones
 
 // ── Zone definitions — business logic (score→label, score→color) ──────────────
 const ZONES = [
@@ -18,13 +18,12 @@ const ZONES = [
   { from:  36, to:   0, color: "#16A34A", label_vi: "MUA MẠNH",  min: 80, max: 100 },
 ] as const;
 
-// ── Visual arc zones — 5 equal segments (36° each) matching ZONES ────────────
+// ── Visual arc zones — 4 equal segments (45° each) for balanced Fear&Greed look
 const ARC_ZONES = [
-  { from: 180, to: 144, color: "#EF4444" },   // Red:        0–20
-  { from: 144, to: 108, color: "#F97316" },   // Orange:    20–40
-  { from: 108, to:  72, color: "#EAB308" },   // Yellow:    40–60
-  { from:  72, to:  36, color: "#22C55E" },   // Green:     60–80
-  { from:  36, to:   0, color: "#16A34A" },   // Dk Green:  80–100
+  { from: 180, to: 135, color: "#EF4444" },   // Red:    Strong Sell
+  { from: 135, to:  90, color: "#F97316" },   // Orange: Sell
+  { from:  90, to:  45, color: "#EAB308" },   // Yellow: Neutral
+  { from:  45, to:   0, color: "#22C55E" },   // Green:  Buy / Strong Buy
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -92,16 +91,19 @@ export function InvestmentGauge({
   const angle  = usePointerAngle(score);
   const zone   = zoneForScore(score);
 
-  // Needle geometry: tapered triangle from hub to arc
+  // Needle geometry: slim tapered triangle — wide base, pointed tip
   const a_rad  = (angle * Math.PI) / 180;
   const cos_a  = Math.cos(a_rad);
   const sin_a  = Math.sin(a_rad);
-  const tip    = polar(CX, CY, R * 0.76, angle);
-  const hw     = 2.8;
+  const tip    = polar(CX, CY, R * 0.80, angle);
+  const base   = polar(CX, CY, 14, angle + 180);   // small tail past hub
+  const hw     = 2.2;
   const needlePath = [
-    `M ${(CX + sin_a * hw).toFixed(2)},${(CY + cos_a * hw).toFixed(2)}`,
+    `M ${(base.x + sin_a * 1.2).toFixed(2)},${(base.y + cos_a * 1.2).toFixed(2)}`,
+    `L ${(CX + sin_a * hw).toFixed(2)},${(CY + cos_a * hw).toFixed(2)}`,
     `L ${tip.x.toFixed(2)},${tip.y.toFixed(2)}`,
     `L ${(CX - sin_a * hw).toFixed(2)},${(CY - cos_a * hw).toFixed(2)}`,
+    `L ${(base.x - sin_a * 1.2).toFixed(2)},${(base.y - cos_a * 1.2).toFixed(2)}`,
     "Z",
   ].join(" ");
 
@@ -135,21 +137,31 @@ export function InvestmentGauge({
       {/* ── Gauge SVG ───────────────────────────────────────────────────── */}
       <div className="relative select-none">
         <svg
-          viewBox="0 0 260 148"
+          viewBox="0 0 260 150"
           className="w-full"
           style={{ display: "block" }}
+          shapeRendering="geometricPrecision"
           aria-label={`Investment gauge: ${zone.label_vi}`}
         >
-          {/* Track — faint background arc */}
+          <defs>
+            <filter id="needle-shadow" x="-80%" y="-80%" width="260%" height="260%">
+              <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#000" floodOpacity="0.45"/>
+            </filter>
+            <filter id="hub-shadow" x="-100%" y="-100%" width="300%" height="300%">
+              <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor="#000" floodOpacity="0.55"/>
+            </filter>
+          </defs>
+
+          {/* Background track */}
           <path
             d={arcD(CX, CY, R, 178, 2)}
             fill="none"
-            stroke="rgba(255,255,255,0.06)"
-            strokeWidth={SW}
+            stroke="rgba(255,255,255,0.05)"
+            strokeWidth={SW + 2}
             strokeLinecap="round"
           />
 
-          {/* Four color zones with PAD gaps and rounded caps */}
+          {/* 4 equal color zones (45° each) with PAD gaps */}
           {ARC_ZONES.map((z, i) => (
             <path
               key={i}
@@ -158,75 +170,57 @@ export function InvestmentGauge({
               stroke={z.color}
               strokeWidth={SW}
               strokeLinecap="round"
-              opacity="0.90"
+              opacity="0.92"
             />
           ))}
 
-          {/* Needle */}
-          <path d={needlePath} fill="#1B2942" />
+          {/* Needle with drop-shadow */}
+          <path d={needlePath} fill="#1B2942" filter="url(#needle-shadow)" />
 
-          {/* Hub outer ring */}
-          <circle
-            cx={CX} cy={CY} r={11}
-            fill="#1A2538"
-            stroke="rgba(255,255,255,0.10)"
-            strokeWidth="1.5"
-          />
-          {/* Hub inner dot */}
-          <circle
-            cx={CX} cy={CY} r={5}
-            fill="#0D1726"
-          />
+          {/* Hub */}
+          <circle cx={CX} cy={CY} r={13} fill="#151F2E" stroke="rgba(255,255,255,0.08)" strokeWidth="1" filter="url(#hub-shadow)"/>
+          <circle cx={CX} cy={CY} r={7}  fill="#0D1726" stroke="rgba(255,255,255,0.14)" strokeWidth="1"/>
+          <circle cx={CX} cy={CY} r={3}  fill="#1B2942"/>
 
-          {/* Scale: 0 left end, 100 right end */}
-          <text
-            x={26} y={146}
-            textAnchor="middle"
-            fontSize="10" fontWeight="500"
-            fill="#475569"
-            fontFamily="ui-monospace,monospace"
-          >
-            0
-          </text>
-          <text
-            x={234} y={146}
-            textAnchor="middle"
-            fontSize="10" fontWeight="500"
-            fill="#475569"
-            fontFamily="ui-monospace,monospace"
-          >
-            100
-          </text>
+          {/* Scale labels */}
+          <text x={22} y={148} textAnchor="middle" fontSize="10" fontWeight="500" fill="#475569" fontFamily="ui-monospace,monospace">0</text>
+          <text x={238} y={148} textAnchor="middle" fontSize="10" fontWeight="500" fill="#475569" fontFamily="ui-monospace,monospace">100</text>
         </svg>
       </div>
 
       {/* ── Score & Recommendation ─────────────────────────────────────── */}
-      <div className="flex flex-col items-center -mt-2 gap-1">
+      <div className="flex flex-col items-center -mt-1 gap-1">
         <div
           className="font-mono tabular-nums"
           style={{
-            fontSize:   58,
+            fontSize:   60,
             fontWeight: 700,
             lineHeight: 1,
             color:      "#FFFFFF",
+            textShadow: `0 0 20px ${zone.color}33`,
           }}
         >
           {Math.round(score)}
         </div>
         <div
           style={{
-            fontSize:      22,
+            fontSize:      26,
             fontWeight:    600,
             lineHeight:    1.2,
             color:         zone.color,
-            letterSpacing: "0.06em",
+            letterSpacing: "0.07em",
           }}
         >
           {zone.label_vi}
         </div>
         <div
-          className="text-[10px] font-medium uppercase tracking-[0.20em]"
-          style={{ color: "#334155" }}
+          style={{
+            fontSize:      14,
+            fontWeight:    500,
+            textTransform: "uppercase" as const,
+            letterSpacing: "0.18em",
+            color:         "#334155",
+          }}
         >
           Khuyến nghị đầu tư
         </div>
