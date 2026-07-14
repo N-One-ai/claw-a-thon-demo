@@ -6,8 +6,8 @@ import { useEffect, useRef, useState } from "react";
 const CX  = 130;
 const CY  = 130;
 const R   = 100;
-const SW  = 20;
-const PAD = 7;   // degrees trimmed per end → ~5px visible gap between zones
+const SW  = 26;
+const PAD = 10;  // degrees trimmed per end → ~10px visible gap, pill-shaped segments
 
 // ── Zone definitions — business logic (score→label, score→color) ──────────────
 const ZONES = [
@@ -91,19 +91,18 @@ export function InvestmentGauge({
   const angle  = usePointerAngle(score);
   const zone   = zoneForScore(score);
 
-  // Needle geometry: slim tapered triangle — wide base, pointed tip
+  // Needle geometry: thin elongated triangle with short tail behind hub
   const a_rad  = (angle * Math.PI) / 180;
   const cos_a  = Math.cos(a_rad);
   const sin_a  = Math.sin(a_rad);
-  const tip    = polar(CX, CY, R * 0.80, angle);
-  const base   = polar(CX, CY, 14, angle + 180);   // small tail past hub
-  const hw     = 2.2;
+  const tip    = polar(CX, CY, R * 0.78, angle);
+  const tail   = polar(CX, CY, 18, angle + 180);
+  const hw     = 2.0;   // half-width at widest point
   const needlePath = [
-    `M ${(base.x + sin_a * 1.2).toFixed(2)},${(base.y + cos_a * 1.2).toFixed(2)}`,
-    `L ${(CX + sin_a * hw).toFixed(2)},${(CY + cos_a * hw).toFixed(2)}`,
+    `M ${(CX + sin_a * hw).toFixed(2)},${(CY + cos_a * hw).toFixed(2)}`,
     `L ${tip.x.toFixed(2)},${tip.y.toFixed(2)}`,
     `L ${(CX - sin_a * hw).toFixed(2)},${(CY - cos_a * hw).toFixed(2)}`,
-    `L ${(base.x - sin_a * 1.2).toFixed(2)},${(base.y - cos_a * 1.2).toFixed(2)}`,
+    `L ${tail.x.toFixed(2)},${tail.y.toFixed(2)}`,
     "Z",
   ].join(" ");
 
@@ -134,8 +133,11 @@ export function InvestmentGauge({
   return (
     <div className="flex flex-col gap-4">
 
-      {/* ── Gauge SVG ───────────────────────────────────────────────────── */}
-      <div className="relative select-none">
+      {/* ── Gauge card — white background, matches reference style ──────── */}
+      <div
+        className="relative select-none rounded-2xl"
+        style={{ background: "#FFFFFF", padding: "20px 12px 16px" }}
+      >
         <svg
           viewBox="0 0 260 150"
           className="w-full"
@@ -145,10 +147,7 @@ export function InvestmentGauge({
         >
           <defs>
             <filter id="needle-shadow" x="-80%" y="-80%" width="260%" height="260%">
-              <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#000" floodOpacity="0.45"/>
-            </filter>
-            <filter id="hub-shadow" x="-100%" y="-100%" width="300%" height="300%">
-              <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor="#000" floodOpacity="0.55"/>
+              <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor="rgba(0,0,0,0.22)" floodOpacity="1"/>
             </filter>
           </defs>
 
@@ -156,12 +155,12 @@ export function InvestmentGauge({
           <path
             d={arcD(CX, CY, R, 178, 2)}
             fill="none"
-            stroke="rgba(255,255,255,0.05)"
+            stroke="rgba(0,0,0,0.06)"
             strokeWidth={SW + 2}
             strokeLinecap="round"
           />
 
-          {/* 4 equal color zones (45° each) with PAD gaps */}
+          {/* 4 equal color zones (45° each) */}
           {ARC_ZONES.map((z, i) => (
             <path
               key={i}
@@ -170,59 +169,40 @@ export function InvestmentGauge({
               stroke={z.color}
               strokeWidth={SW}
               strokeLinecap="round"
-              opacity="0.92"
             />
           ))}
 
-          {/* Needle with drop-shadow */}
-          <path d={needlePath} fill="#1B2942" filter="url(#needle-shadow)" />
+          {/* Needle */}
+          <path d={needlePath} fill="#111827" filter="url(#needle-shadow)" />
 
-          {/* Hub */}
-          <circle cx={CX} cy={CY} r={13} fill="#151F2E" stroke="rgba(255,255,255,0.08)" strokeWidth="1" filter="url(#hub-shadow)"/>
-          <circle cx={CX} cy={CY} r={7}  fill="#0D1726" stroke="rgba(255,255,255,0.14)" strokeWidth="1"/>
-          <circle cx={CX} cy={CY} r={3}  fill="#1B2942"/>
+          {/* Hub: white outer ring → gray ring → dark center */}
+          <circle cx={CX} cy={CY} r={16} fill="#FFFFFF" stroke="#E5E7EB" strokeWidth="1.5"/>
+          <circle cx={CX} cy={CY} r={10} fill="#4B5563"/>
+          <circle cx={CX} cy={CY} r={4.5} fill="#111827"/>
 
           {/* Scale labels */}
-          <text x={22} y={148} textAnchor="middle" fontSize="10" fontWeight="500" fill="#475569" fontFamily="ui-monospace,monospace">0</text>
-          <text x={238} y={148} textAnchor="middle" fontSize="10" fontWeight="500" fill="#475569" fontFamily="ui-monospace,monospace">100</text>
+          <text x={20} y={148} textAnchor="middle" fontSize="11" fontWeight="500" fill="#9CA3AF" fontFamily="ui-monospace,monospace">0</text>
+          <text x={240} y={148} textAnchor="middle" fontSize="11" fontWeight="500" fill="#9CA3AF" fontFamily="ui-monospace,monospace">100</text>
         </svg>
-      </div>
 
-      {/* ── Score & Recommendation ─────────────────────────────────────── */}
-      <div className="flex flex-col items-center -mt-1 gap-1">
-        <div
-          className="font-mono tabular-nums"
-          style={{
-            fontSize:   60,
-            fontWeight: 700,
-            lineHeight: 1,
-            color:      "#FFFFFF",
-            textShadow: `0 0 20px ${zone.color}33`,
-          }}
-        >
-          {Math.round(score)}
-        </div>
-        <div
-          style={{
-            fontSize:      26,
-            fontWeight:    600,
-            lineHeight:    1.2,
-            color:         zone.color,
-            letterSpacing: "0.07em",
-          }}
-        >
-          {zone.label_vi}
-        </div>
-        <div
-          style={{
-            fontSize:      14,
-            fontWeight:    500,
-            textTransform: "uppercase" as const,
-            letterSpacing: "0.18em",
-            color:         "#334155",
-          }}
-        >
-          Khuyến nghị đầu tư
+        {/* Score & Recommendation — dark text on white card */}
+        <div className="flex flex-col items-center gap-0.5" style={{ marginTop: -4 }}>
+          <div
+            className="font-mono tabular-nums"
+            style={{ fontSize: 60, fontWeight: 700, lineHeight: 1, color: "#111827" }}
+          >
+            {Math.round(score)}
+          </div>
+          <div
+            style={{ fontSize: 26, fontWeight: 600, lineHeight: 1.3, color: zone.color, letterSpacing: "0.07em" }}
+          >
+            {zone.label_vi}
+          </div>
+          <div
+            style={{ fontSize: 13, fontWeight: 500, textTransform: "uppercase" as const, letterSpacing: "0.20em", color: "#9CA3AF" }}
+          >
+            Khuyến nghị đầu tư
+          </div>
         </div>
       </div>
 
