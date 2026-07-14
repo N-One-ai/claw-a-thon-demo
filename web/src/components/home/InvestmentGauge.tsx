@@ -173,7 +173,7 @@ export function InvestmentGauge({ score, confidence, reasoning, insight }: Gauge
             textAnchor="middle"
             dominantBaseline="middle"
             fill="#FFFFFF"
-            fontSize={66}
+            fontSize={46}
             fontWeight={700}
           >
             {Math.round(score)}
