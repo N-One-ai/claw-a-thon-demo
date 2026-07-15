@@ -108,7 +108,6 @@ export function InvestmentGauge({ score, confidence, reasoning, insight }: Gauge
   // Staggered reveals
   const [confWidth,    setConfWidth   ] = useState(0);
   const [shownBullets, setShownBullets] = useState(0);
-  const [insightOn,    setInsightOn   ] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setConfWidth(confidence), 500);
@@ -121,11 +120,6 @@ export function InvestmentGauge({ score, confidence, reasoning, insight }: Gauge
       setTimeout(() => setShownBullets(i + 1), 900 + i * 220));
     return () => ts.forEach(clearTimeout);
   }, [reasoning]);
-
-  useEffect(() => {
-    const t = setTimeout(() => setInsightOn(true), 1500);
-    return () => clearTimeout(t);
-  }, []);
 
   return (
     <div className="flex flex-col gap-4">
@@ -241,28 +235,6 @@ export function InvestmentGauge({ score, confidence, reasoning, insight }: Gauge
         </div>
       )}
 
-      {/* ── AI Insight card ──────────────────────────────────────────────────── */}
-      <div
-        className="rounded-2xl px-4 py-3.5 space-y-1.5"
-        style={{
-          background: "rgba(124,255,74,0.045)",
-          border:     "1px solid rgba(124,255,74,0.10)",
-          opacity:    insightOn ? 1 : 0,
-          transform:  insightOn ? "none" : "translateY(4px)",
-          transition: "opacity 0.5s ease, transform 0.5s ease",
-        }}
-      >
-        <div className="flex items-center gap-2">
-          <span style={{ fontSize: 11 }}>💡</span>
-          <span className="text-[9px] font-semibold uppercase tracking-[0.16em]"
-            style={{ color: "#475569" }}>
-            Nhận định AI
-          </span>
-        </div>
-        <p className="text-[12px] leading-relaxed" style={{ color: "#94A3B8" }}>
-          {insight}
-        </p>
-      </div>
 
     </div>
   );
