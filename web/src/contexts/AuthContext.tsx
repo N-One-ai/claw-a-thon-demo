@@ -13,6 +13,7 @@ interface AuthState {
   signInWithGoogle: () => Promise<void>;
   signInWithFacebook: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
+  resendVerification: (email: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -46,15 +47,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithEmail = useCallback(async (email: string, password: string) => {
     const { error } = await getSupabase().auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
+    if (!error) return { error: null };
+    const msg = error.message.toLowerCase();
+    if (msg.includes("invalid login credentials") || msg.includes("invalid credentials")) {
+      return { error: "EMAIL_NOT_CONFIRMED_OR_WRONG_PASSWORD" };
+    }
+    if (msg.includes("email not confirmed")) {
+      return { error: "EMAIL_NOT_CONFIRMED_OR_WRONG_PASSWORD" };
+    }
+    if (msg.includes("too many requests")) {
+      return { error: "Quá nhiều lần thử. Vui lòng đợi vài phút rồi thử lại." };
+    }
+    return { error: error.message };
   }, []);
 
   const signUpWithEmail = useCallback(async (email: string, password: string, name: string) => {
-    const { error } = await getSupabase().auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: name } },
-    });
+    // Try server-side admin registration (auto-confirms, no verification email needed)
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, name }),
+      });
+      const json = await res.json();
+      if (json.error === "SERVICE_KEY_MISSING") {
+        // Fallback: use client-side signUp (requires email confirmation)
+        const { error } = await getSupabase().auth.signUp({
+          email, password, options: { data: { full_name: name } },
+        });
+        if (!error) return { error: null };
+        const msg = error.message.toLowerCase();
+        if (msg.includes("already registered") || msg.includes("user already exists")) {
+          return { error: "Email này đã được đăng ký. Vui lòng đăng nhập." };
+        }
+        return { error: error.message };
+      }
+      if (json.error) return { error: json.error };
+      return { error: null };
+    } catch {
+      return { error: "Không thể kết nối đến máy chủ. Vui lòng thử lại." };
+    }
+  }, []);
+
+  const resendVerification = useCallback(async (email: string) => {
+    const { error } = await getSupabase().auth.resend({ type: "signup", email });
     return { error: error?.message ?? null };
   }, []);
 
@@ -84,7 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithFacebook, resetPassword, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithFacebook, resetPassword, resendVerification, signOut }}>
       {children}
     </AuthContext.Provider>
   );

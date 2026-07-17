@@ -9,6 +9,7 @@ const VCI_BASE = "https://trading.vietcap.com.vn/api";
 const VCI_HEADERS: Record<string, string> = {
   "Content-Type": "application/json",
   "Accept": "application/json, text/plain, */*",
+  "Accept-Encoding": "gzip, deflate, br",
   "Accept-Language": "en-US,en;q=0.9,vi-VN;q=0.8,vi;q=0.7",
   "Cache-Control": "no-cache",
   "Pragma": "no-cache",
@@ -47,6 +48,11 @@ const HNX_SAMPLE = [
 
 export const maxDuration = 20;
 export const dynamic = "force-dynamic";
+
+// Module-level best-effort cache — reused when the same serverless instance is warm.
+// Falls back to this when fresh API calls fail, avoiding all-null dashboards.
+let _memCache: { data: any; at: number } | null = null;
+const MEM_TTL = 10 * 60 * 1_000; // 10 minutes
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -142,14 +148,14 @@ function sumVolume(board: any[]): number {
 }
 
 function sumForeignFlow(board: any[]): number | null {
-  // foreignBuyValue / foreignSellValue in triệu VND → divide by 1 000 → tỷ VND
+  // foreignBuyValue / foreignSellValue in VND → divide by 1 000 000 000 → tỷ VND
   let buy = 0, sell = 0;
   for (const item of board) {
     buy  += item?.matchPrice?.foreignBuyValue  ?? 0;
     sell += item?.matchPrice?.foreignSellValue ?? 0;
   }
   if (buy === 0 && sell === 0) return null;
-  return +((buy - sell) / 1_000).toFixed(1);
+  return +((buy - sell) / 1_000_000_000).toFixed(1);
 }
 
 function calcHealthScore(
@@ -201,7 +207,7 @@ async function fetchFromVci() {
     hoseBreadth,
   );
 
-  return {
+  const result = {
     vnindex:     indexResult?.vnindex ?? null,
     vn30:        indexResult?.vn30    ?? null,
     hose:        hoseBreadth,
@@ -213,6 +219,12 @@ async function fetchFromVci() {
     sparklines:  indexResult?.sparklines ?? { vnindex: [], hnxindex: [], vn30: [], volume: [] },
     errors,
   };
+
+  // Save to in-memory cache only when we have at least index data
+  const hasData = result.vnindex != null || (result.sparklines.vnindex?.length ?? 0) > 5;
+  if (hasData) _memCache = { data: result, at: Date.now() };
+
+  return result;
 }
 
 // ── Route handler ────────────────────────────────────────────────────────────
@@ -230,7 +242,7 @@ export async function GET() {
         // Verify it has the expected market data shape (not a "not found" response)
         if (json?.data != null && "vnindex" in json.data) {
           return NextResponse.json(json, {
-            headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" },
+            headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=3600" },
           });
         }
       }
@@ -242,11 +254,26 @@ export async function GET() {
   // 2. Fallback: fetch directly from VCI public APIs
   try {
     const data = await fetchFromVci();
+    const stale = data.vnindex == null && (data.sparklines?.vnindex?.length ?? 0) === 0;
+    // If fresh fetch returned all-null but we have recent in-memory data, serve that instead
+    if (stale && _memCache && Date.now() - _memCache.at < MEM_TTL) {
+      return NextResponse.json(
+        { status: "ok", data: _memCache.data, stale: true, timestamp: new Date().toISOString() },
+        { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=3600" } },
+      );
+    }
     return NextResponse.json(
       { status: "ok", data, timestamp: new Date().toISOString() },
-      { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" } },
+      { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=3600" } },
     );
   } catch (err: any) {
+    // If fetch threw entirely, try memory cache before giving up
+    if (_memCache && Date.now() - _memCache.at < MEM_TTL) {
+      return NextResponse.json(
+        { status: "ok", data: _memCache.data, stale: true, timestamp: new Date().toISOString() },
+        { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=3600" } },
+      );
+    }
     return NextResponse.json(
       { status: "error", data: null, message: String(err) },
       { status: 502 },
