@@ -82,9 +82,8 @@ export function ErrorState({
   const { t } = useTranslation();
 
   const clean = parseErrorMessage(message);
-  const isBackendDown = clean.includes("503") || clean.includes("chưa được cấu hình") || clean.includes("Backend");
-  const isNetworkError = !isBackendDown && (clean.includes("502") || clean.includes("fetch") || clean.includes("aborted") || clean.includes("network"));
-  const isServerError = clean.includes("500") || clean.includes("Internal") || clean.includes("Lỗi");
+  const isNetworkError = clean.includes("502") || clean.includes("fetch") || clean.includes("aborted") || clean.includes("network");
+  const isServerError = !isNetworkError && (clean.includes("500") || clean.includes("Internal") || clean.includes("Lỗi"));
   const isNotFound = clean.includes("404") || clean.includes("không tìm thấy") || clean.includes("not found");
 
   return (
@@ -103,26 +102,22 @@ export function ErrorState({
           {ticker && <span className="text-accent ml-1.5">{ticker}</span>}
         </p>
 
-        {/* Error code badge — hide when we already show a friendly message below */}
-        {!isBackendDown && (
-          <div className="inline-block max-w-full">
-            <p className="text-[11px] sm:text-xs text-slate-500 font-mono bg-white/[0.03] border border-white/[0.05] rounded-lg px-3 py-1.5 break-all">
-              {clean}
-            </p>
-          </div>
-        )}
+        {/* Error code badge */}
+        <div className="inline-block max-w-full">
+          <p className="text-[11px] sm:text-xs text-slate-500 font-mono bg-white/[0.03] border border-white/[0.05] rounded-lg px-3 py-1.5 break-all">
+            {clean}
+          </p>
+        </div>
 
         {/* Contextual hint */}
         <p className="text-xs text-slate-600 mt-2.5 leading-relaxed">
-          {isBackendDown
-            ? "Tính năng phân tích đang trong quá trình phát triển và sẽ sớm ra mắt."
-            : isNetworkError
-              ? "Không thể kết nối máy chủ. Kiểm tra mạng và thử lại."
-              : isNotFound
-                ? "Mã cổ phiếu không hợp lệ hoặc chưa được hỗ trợ."
-                : isServerError
-                  ? "Lỗi tạm thời từ máy chủ. Thường tự hết sau vài giây."
-                  : "Vui lòng thử lại hoặc kiểm tra mã cổ phiếu."}
+          {isNetworkError
+            ? "Không thể kết nối máy chủ. Kiểm tra mạng và thử lại."
+            : isNotFound
+              ? "Mã cổ phiếu không hợp lệ hoặc chưa được hỗ trợ."
+              : isServerError
+                ? "Lỗi tạm thời từ máy chủ. Thường tự hết sau vài giây."
+                : "Vui lòng thử lại hoặc kiểm tra mã cổ phiếu."}
         </p>
       </div>
 
