@@ -39,7 +39,7 @@ export const vi: Translations = {
     badge: "AI phân tích đầu tư • Dữ liệu HOSE & HNX • Cập nhật liên tục",
     titleWhite: "Phân tích, định giá cổ phiếu",
     titleGradient: "bằng AI",
-    subtitle: "AI đồng hành cùng nhà đầu tư trung và dài hạn.",
+    subtitle: "StockMind AI đồng hành cùng nhà đầu tư trung và dài hạn.",
     subtitleHighlight: "Định giá thông minh • Phân tích rủi ro • Báo cáo đầu tư bằng AI",
     placeholder: "Nhập mã cổ phiếu: FPT, VCB, HPG...",
     analyzeBtn: "Phân tích ngay",
